@@ -17,6 +17,17 @@ converge, after choosing strategies designed to make that the common case (per t
 
 Examples are kept small (few levels, small trial counts) so real optimizer calls stay fast, per
 the brief.
+
+**The control-row property above (``test_adding_an_all_success_control_leaves_a_fixed_u_1_fit_
+unchanged``) only ever calls ``_fit_fixed_trivial`` (``upper=1.0, lower=0.0``), the ``GLM``
+path.** `docs/REVIEWS.md` R10 "Still open" item 1 reports that the *other* fixed-``upper=1.0``
+path -- ``lower="estimate"``, ``GenericLikelihoodModel`` -- violates the same plan section 6.4
+property: statsmodels' own ``LikelihoodModel.fit`` minimises ``-loglike(params) / nobs``, and
+``nobs`` changes when a row is added even though the control's own contribution to the
+log-likelihood is exactly ``0``. ``test_adding_an_all_success_control_to_the_generic_path_
+leaves_status_unchanged`` below extends the same strategy to that path, asserting status
+equality unconditionally (never behind an ``assume``, which would hide exactly the mismatch
+this property exists to catch -- the lesson of R9's "assume... stepping around a defect").
 """
 
 from __future__ import annotations
@@ -24,7 +35,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
 from marginkit import Axis, Fit, Observations, Status, fit_dose_response
@@ -214,3 +225,72 @@ def test_rescaling_severity_shifts_mu_by_log_c_and_leaves_s_unchanged(
     assert fit_rescaled.params["s"].value == pytest.approx(
         fit_original.params["s"].value, rel=1e-6, abs=1e-9
     )
+
+
+def _fit_generic_upper_fixed(obs: Observations) -> Fit:
+    """``upper=1.0`` fixed, ``lower="estimate"`` -- the ``GenericLikelihoodModel`` path (D7
+    ``decisions/0004``), not the ``GLM`` path ``_fit_fixed_trivial`` above exercises.
+    ``link="logit"``: the regression this property targets (`docs/REVIEWS.md` R10 item 1) is
+    confirmed reachable under ``logit`` on designs this strategy draws, in every environment
+    checked (`tests/unit/test_models_control_row_invariance.py`'s module docstring has the full
+    cross-environment table) -- either directly on the pinned ``@example`` below, or via
+    Hypothesis's own random search finding a different counterexample under the same link, which
+    is why this single, fixed link is enough here even though it is not the link that most
+    directly demonstrates the defect on every platform (``probit`` does on one of the three
+    environments checked).
+    """
+    return fit_dose_response(obs, model="binomial", link="logit", upper=1.0, lower="estimate")
+
+
+@example(([1.0, 2.0, 4.0, 8.0, 16.0], [48, 40, 25, 12, 3], [50, 50, 50, 50, 50]), 50)
+@given(_non_separated_counts(), st.integers(min_value=1, max_value=200))
+@settings(max_examples=_MAX_EXAMPLES, deadline=None)
+def test_adding_an_all_success_control_to_the_generic_path_leaves_status_unchanged(
+    counts: tuple[list[float], list[int], list[int]],
+    control_trials: int,
+) -> None:
+    """`docs/REVIEWS.md` R10 "Still open" item 1: the same control-row invariance plan section
+    6.4 asks for, now on the ``upper=1.0`` fixed, ``lower="estimate"`` path. Status equality is
+    asserted unconditionally, with no ``assume`` guarding it -- an ``assume(both OK)`` here would
+    discard exactly the examples that demonstrate the defect, the same mistake R9 records for a
+    different property. When both sides do converge, the reported ``mu``/``s``/``lower`` and
+    ``log_likelihood`` must also agree (the control's own contribution to the likelihood is
+    exactly ``0`` at every parameter value, not only at the optimum, so a converged fit cannot
+    legitimately move when the control is added).
+
+    The ``@example`` above is the exact `docs/REVIEWS.md` R10 fixture (also pinned, independent
+    of Hypothesis, in `tests/unit/test_models_control_row_invariance.py`) and is run on every
+    invocation regardless of what Hypothesis's own search happens to draw. **It is not, on its
+    own, a guarantee that this property fails pre-fix on every platform**: verified in a fresh
+    ``python:3.11`` container (Linux/x86_64, dependencies resolved to "latest"), that pinned
+    example *passes* under ``link="logit"`` -- on that platform/dependency combination the
+    no-control ``logit`` fit on this exact fixture already fails to converge on its own, for the
+    unrelated reason `tests/unit/test_models_control_row_invariance.py` documents, so the
+    equality holds trivially either way. The test still failed there, because Hypothesis's own
+    random search independently found two different counts tables under the same ``logit`` link
+    where the defect does show up. Keeping both the ``@example`` (deterministic coverage of one
+    specific, previously-reported input) and the random search (broader, and in practice the
+    one that mattered on that platform) is the point -- neither alone was sufficient evidence in
+    every environment checked.
+    """
+    severity, successes, trials = counts
+
+    without_control = _from_counts((severity, successes, trials))
+    with_control = _from_counts(
+        ([0.0, *severity], [control_trials, *successes], [control_trials, *trials])
+    )
+
+    fit_without = _fit_generic_upper_fixed(without_control)
+    fit_with = _fit_generic_upper_fixed(with_control)
+
+    assert fit_with.status == fit_without.status, (
+        f"status changed from {fit_without.status!r} to {fit_with.status!r} merely by adding "
+        "a zero-contribution, all-success control row"
+    )
+    if fit_without.status is Status.OK:
+        assert fit_with.params is not None and fit_without.params is not None
+        for name in ("mu", "s", "lower"):
+            assert fit_with.params[name].value == pytest.approx(
+                fit_without.params[name].value, rel=1e-6
+            )
+        assert fit_with.log_likelihood == pytest.approx(fit_without.log_likelihood, rel=1e-6)

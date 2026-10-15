@@ -704,8 +704,8 @@ def diagnose(fit: Fit) -> Diagnostics:
         if dispersion > _DISPERSION_WARNING_THRESHOLD:
             warnings.append(
                 f"{_OVERDISPERSED_WARNING_PREFIX}dispersion (Pearson chi-square / df) is "
-                f"{dispersion!r}, exceeding {_DISPERSION_WARNING_THRESHOLD} (plan section 5.7); "
-                "nothing is rescaled and no interval changes as a result"
+                f"{dispersion!r}, exceeding {_DISPERSION_WARNING_THRESHOLD}; nothing is "
+                "rescaled and no interval changes as a result"
             )
 
     if sparse_entries:

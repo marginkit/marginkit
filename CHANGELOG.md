@@ -11,6 +11,28 @@ satisfy the public-API change checklist in `docs/IMPLEMENTATION_PLAN.md` Appendi
 
 ## [Unreleased]
 
+### Changed
+- Warning and exception messages no longer cite internal design documents (decision records,
+  plan sections, decision labels). Only the prose changed: the leading tokens `NON_MONOTONE: `,
+  `NON_MONOTONE_DATA: `, `OVERDISPERSED: ` and `SPARSE_CELLS: ` are byte-identical, and every
+  exception type and raise condition is unchanged except as noted under Fixed. Match warnings on
+  the token (`w.startswith("NON_MONOTONE: ")`), not on the text after it.
+- The `NON_MONOTONE: ` warning now says precisely which bounds are not reported: the exact
+  one-sided bounds. On a converged fit any `lo`/`hi` shown come from the fitted curve; on a failed
+  fit no bounds are reported.
+
+### Fixed
+- `fit_dose_response` on a log axis with `upper=1.0` fixed, an estimated `lower`, and a
+  zero-severity control: the control, whose likelihood contribution is exactly zero, no longer
+  enters the optimizer or its start values, so the fit is judged exactly as for the same data
+  without the control. Estimates can differ within optimizer tolerance, and a fit at the edge of
+  convergence can change `status` between `OK` and `NOT_CONVERGED`. The reported `log_likelihood`
+  still covers every cell. Data without such a control is unaffected.
+- `fit_dose_response` on a log axis whose only severity is the zero control now raises a
+  `ValueError` saying a dose-response curve needs at least one severity level besides the control.
+  It previously raised an unexplained numpy error, or, when an asymptote was estimated, returned
+  `NOT_CONVERGED`.
+
 ## [0.1.1] -- unreleased
 
 Packaging only, prepared as the first PyPI release (`decisions/0024`), to be tagged `v0.1.1` once publishing to PyPI is possible.

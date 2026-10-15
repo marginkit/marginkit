@@ -298,7 +298,27 @@ def _contradiction_warning(
     hi_bound: float,
     target: float,
     level: float,
+    curve_exists: bool,
 ) -> str:
+    """``curve_exists`` picks the one sentence that differs between this function's two
+    callers, so the rest of the wording -- and the frozen ``NON_MONOTONE: `` token -- is shared.
+
+    ``True`` (``_contradiction_or_none``'s own ``Status.OK`` branch): the fit converged, so
+    ``threshold()`` still solves for ``value`` and still runs the requested interval method --
+    only the *exact* one-sided bounds (the suppressed ``RIGHT``/``LEFT`` claim) go unreported,
+    not the profile/delta ``lo``/``hi`` this ``Threshold`` actually carries.
+
+    ``False`` (``_contradiction_or_none``'s non-``OK`` branch, and ``_exact_bound_fallback``,
+    which is reached only for a failed fit): there is no fitted curve at all, and this
+    ``Threshold``'s ``value``/``lo``/``hi`` are all ``None`` -- "no bounds are reported" is
+    simply true here, with nothing to qualify.
+    """
+    exact_bounds_clause = (
+        "the exact one-sided bounds are not reported here -- any lo/hi this Threshold carries "
+        "comes from the fitted curve instead, not from these exact tests"
+        if curve_exists
+        else "no bounds are reported"
+    )
     return (
         # `decisions/0011`'s second amendment: the leading `NON_MONOTONE: ` token is the
         # supported way to detect this condition -- distinct from `Fit.monotonicity`'s own
@@ -312,10 +332,10 @@ def _contradiction_warning(
         # tests just proved inconsistent with any monotone curve. Changing or removing this token
         # is a behaviourally breaking change.
         "NON_MONOTONE: censoring.classify: exact one-sided tests at confidence "
-        f"{level} contradict monotonicity (decisions/0011): severity {lo_severity} confidently "
+        f"{level} contradict monotonicity: severity {lo_severity} confidently "
         f"passes (lower bound {lo_bound!r} >= target {target!r}) while the lower severity "
-        f"{hi_severity} confidently fails (upper bound {hi_bound!r} < target {target!r}); no "
-        "bounds are reported"
+        f"{hi_severity} confidently fails (upper bound {hi_bound!r} < target {target!r}); "
+        f"{exact_bounds_clause}"
     )
 
 
@@ -369,6 +389,7 @@ def _contradiction_or_none(
         hi_bound=hi_bound,
         target=target,
         level=level,
+        curve_exists=fit.status is Status.OK,
     )
     if fit.status is Status.OK:
         # A converged fit still has a model-based estimate, and `Threshold` requires `value`
@@ -435,6 +456,10 @@ def _exact_bound_fallback(
             hi_bound = bound
 
     if lo_severity is not None and hi_severity is not None and lo_severity >= hi_severity:
+        # `_exact_bound_fallback` is reached only for a failed fit (`classify` returns directly
+        # on `Status.OK` before ever calling it) -- `curve_exists=False` unconditionally, not
+        # `fit.status is Status.OK`, so that invariant is visible here rather than merely relied
+        # on.
         warning = _contradiction_warning(
             lo_severity=lo_severity,
             lo_bound=lo_bound,
@@ -442,6 +467,7 @@ def _exact_bound_fallback(
             hi_bound=hi_bound,
             target=target,
             level=bracket_level,
+            curve_exists=False,
         )
         return Classification(
             status=fit.status,

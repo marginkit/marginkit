@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from marginkit import Axis, Definition, Observations, Status, fit_dose_response, threshold
+from marginkit import Axis, Definition, Fit, Observations, Status, fit_dose_response, threshold
+from marginkit.censoring import exact_one_sided_bound
 from marginkit.types import Censoring
 
 _LEVEL = 0.95
@@ -338,4 +339,106 @@ class TestOpenSidedProfileCensoring:
             "none of the constructed candidate designs produced OPEN_UPPER/OPEN_LOWER against "
             "the real threshold() implementation; this test's candidate list needs revisiting "
             "(plan section 5.4's search-limit behaviour was unverified when it was written)"
+        )
+
+
+class TestNonMonotoneContradictionWarningOnAConvergedFit:
+    """`docs/REVIEWS.md` R10 "Still open" item 4: the ``NON_MONOTONE: `` warning
+    (``decisions/0011``'s second amendment, token frozen) ends with the fixed phrase "no bounds
+    are reported". That is true on the ``SEPARATION``/``NOT_CONVERGED`` fallback branch (see
+    ``tests/unit/test_threshold_zeta.py::TestPpoSensorNoiseNonMonotoneContradiction``, where
+    ``Threshold.value``/``.lo``/``.hi`` really are all ``None``), but the same warning text is
+    also used on a **converged** fit (``censoring.py``'s ``_contradiction_or_none``, the
+    ``fit.status is Status.OK`` branch): there, the contradiction only suppresses the
+    ``RIGHT``/``LEFT`` directional short-circuit, and ``threshold()`` still solves for ``value``
+    and still runs the requested interval method, so ``Threshold.lo``/``.hi`` are typically set.
+    "No bounds are reported" is then false of the very object carrying the warning -- only the
+    *exact* one-sided bounds (the ``RIGHT``/``LEFT`` claim) go unreported, not the profile/delta
+    ones.
+
+    The data: the ``form_b`` curve from the `selenium` dataset in ``README.md``'s own worked
+    example (already executed, with its own assertions, by ``tests/unit/
+    test_readme_examples.py``, so this fit's convergence is independently exercised elsewhere --
+    not a fixture invented for this test alone). Survival rises from severity 300 to 400 before
+    falling again, and at ``target=0.5`` the exact one-sided bounds (confirmed below, at
+    ``level=0.95``) put severity 300's upper bound (~0.483) below the target while severity
+    400's lower bound (~0.528), a *higher* severity, sits above it -- a contradiction of
+    ``decisions/0011``'s monotonicity assumption, on a fit that otherwise converges cleanly.
+    """
+
+    _CONC = [0.0, 100.0, 200.0, 300.0, 400.0, 500.0]
+    _TOTAL = [141, 153, 142, 139, 154, 155]
+    _DEAD = [2, 30, 59, 82, 62, 85]
+    _TARGET = 0.5
+
+    def _fit(self) -> Fit:
+        axis = Axis(name="concentration", unit="ug/L", scale="log")
+        successes = [n - d for n, d in zip(self._TOTAL, self._DEAD, strict=True)]
+        obs = Observations.from_counts(
+            axis,
+            severity=self._CONC,
+            successes=successes,
+            trials=self._TOTAL,
+            outcome="survival",
+            direction="decreasing",
+        )
+        return fit_dose_response(obs, model="binomial", link="probit", upper="estimate", lower=0.0)
+
+    def test_fixture_premise_fit_converges_and_the_exact_bounds_contradict(self) -> None:
+        fit = self._fit()
+        assert fit.status is Status.OK
+
+        # Severity 300 (index 3) confidently fails the target; severity 400 (index 4), a
+        # *higher* severity, confidently passes it -- backwards from what a monotone decreasing
+        # curve allows, and the premise this test's contradiction depends on.
+        successes = [n - d for n, d in zip(self._TOTAL, self._DEAD, strict=True)]
+        upper_300 = exact_one_sided_bound(successes[3], self._TOTAL[3], level=_LEVEL, side="upper")
+        lower_400 = exact_one_sided_bound(successes[4], self._TOTAL[4], level=_LEVEL, side="lower")
+        assert upper_300 < self._TARGET < lower_400
+
+    def test_warning_starts_with_the_non_monotone_token_and_bounds_are_set(self) -> None:
+        fit = self._fit()
+        t = threshold(
+            fit,
+            definition=Definition.absolute(self._TARGET),
+            interval_method="profile",
+            level=_LEVEL,
+        )
+
+        assert t.status is Status.OK
+        assert t.censoring is Censoring.NONE
+        # The whole point: on this branch the solve path still ran, so there genuinely are
+        # bounds -- unlike the SEPARATION-fallback case this token also covers.
+        assert t.value is not None
+        assert t.lo is not None
+        assert t.hi is not None
+
+        non_monotone = [w for w in t.warnings if w.startswith("NON_MONOTONE: ")]
+        assert len(non_monotone) == 1, (
+            f"expected exactly one NON_MONOTONE: warning, got {t.warnings!r}"
+        )
+
+    def test_warning_does_not_claim_no_bounds_are_reported_when_bounds_are_set(self) -> None:
+        """The actual bug pin: ``t.lo``/``t.hi`` are not ``None`` (asserted above), so a warning
+        claiming "no bounds are reported" is false of this ``Threshold``. The fixed wording must
+        make clear that it is specifically the *exact* one-sided bounds that go unreported, not
+        the profile/delta ones this object actually carries. Wording beyond that is
+        deliberately not pinned here -- only the contradiction and the word "exact"."""
+        fit = self._fit()
+        t = threshold(
+            fit,
+            definition=Definition.absolute(self._TARGET),
+            interval_method="profile",
+            level=_LEVEL,
+        )
+        assert t.lo is not None and t.hi is not None
+
+        non_monotone = next(w for w in t.warnings if w.startswith("NON_MONOTONE: "))
+        assert "no bounds are reported" not in non_monotone, (
+            "self-contradictory: this Threshold's lo/hi are set, but the warning claims no "
+            f"bounds are reported: {non_monotone!r}"
+        )
+        assert "exact" in non_monotone, (
+            "the warning should clarify that it is the exact one-sided bounds (the "
+            f"RIGHT/LEFT claim), not the profile/delta ones, that go unreported: {non_monotone!r}"
         )
