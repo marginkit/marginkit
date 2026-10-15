@@ -35,6 +35,9 @@ satisfy the public-API change checklist in `docs/IMPLEMENTATION_PLAN.md` Appendi
 
 ## [0.1.1] -- unreleased
 
+`0.1.1rc1` is a TestPyPI-only dry run of the release pipeline (build, Trusted Publishing upload,
+install check); pre-release tags never reach PyPI. It carries the same content as 0.1.1.
+
 Packaging only, prepared as the first PyPI release (`decisions/0024`), to be tagged `v0.1.1` once publishing to PyPI is possible.
 No code, public API, schema or numeric change from 0.1.0; upgrading needs nothing.
 

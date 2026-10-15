@@ -1,4 +1,6 @@
 # Publishes a tagged release to TestPyPI, verifies it installs, then publishes to PyPI.
+# A pre-release tag (PEP 440 a/b/rc, e.g. v0.1.1rc1) stops after the TestPyPI install check:
+# it is a dry run of the whole pipeline and never reaches PyPI (decisions/0024).
 # decisions/0024: PyPI Trusted Publishing (OIDC), no API token stored anywhere. The `pypi`
 # environment requires the owner's approval, so nothing reaches PyPI without it.
 #
@@ -28,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,6 +45,10 @@ jobs:
           echo "tag=$tag code=$code"
           test "$tag" = "$code"
           echo "version=$tag" >> "$GITHUB_OUTPUT"
+          pip install packaging
+          prerelease="$(python -c "from packaging.version import Version; print(str(Version('$tag').is_prerelease).lower())")"
+          echo "prerelease=$prerelease"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
       - run: pip install build twine
       - run: python -m build
       - run: twine check dist/*
@@ -92,6 +99,8 @@ jobs:
   pypi:
     name: publish to PyPI
     needs: [build, verify-testpypi]
+    # Pre-releases are TestPyPI dry runs only.
+    if: needs.build.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     environment:
       name: pypi
