@@ -502,7 +502,7 @@ def _fieller_shape(
             "ratio_interval: method='fieller' needs finite per-threshold variances, got "
             f"Va={va!r} and Vb={vb!r}. A non-finite delta-method variance means the interval "
             "shape cannot be determined -- this is a distinct failure from the A == 0 boundary "
-            "(decisions/0017) and is not silently routed through it (S2, Phase 6 stats review)"
+            "and is not silently routed through it"
         )
 
     a_coef = theta_b * theta_b - z * z * vb
@@ -517,9 +517,9 @@ def _fieller_shape(
             collected_warnings.append(
                 f"ratio_interval: the Fieller discriminant is negative ({disc!r}) in the "
                 "A > 0 branch, where it is mathematically guaranteed to be >= 0 (the point "
-                "estimate itself is a root of the boundary, docs/STATISTICS.md); clamped to "
-                "0.0 rather than silently -- this may indicate numerical trouble upstream, not "
-                "just floating-point rounding (S3, Phase 6 stats review)"
+                "estimate itself is a root of the boundary); clamped to 0.0 rather than "
+                "silently -- this may indicate numerical trouble upstream, not just "
+                "floating-point rounding"
             )
         disc_clamped = max(disc, 0.0)
         r1, r2 = _stable_quadratic_roots(
@@ -536,7 +536,7 @@ def _fieller_shape(
                 "ratio_interval: the Fieller lower root is below zero "
                 f"(unclipped lo={lo!r}); a severity ratio cannot be negative, so the reported "
                 "interval is intersected with the positive parameter space (lo=0.0) -- this "
-                "stays a conservative superset of the true confidence set (decisions/0019)"
+                "stays a conservative superset of the true confidence set"
             )
             lo = 0.0
         return IntervalShape.BOUNDED, lo, hi, tuple(collected_warnings)
@@ -554,8 +554,7 @@ def _fieller_shape(
                 "ratio_interval: the Fieller set is two rays both lying below zero "
                 f"(unclipped lo={lo!r}, hi={hi!r}); a severity ratio cannot be negative, so the "
                 "set intersected with the positive parameter space is unconstrained on (0, inf) "
-                "-- reporting shape=UNBOUNDED exactly, not as a conservative superset "
-                "(decisions/0021)"
+                "-- reporting shape=UNBOUNDED exactly, not as a conservative superset"
             )
             return IntervalShape.UNBOUNDED, None, None, (warning,)
         # `decisions/0022`: K > 0 with A < 0 forces opposite-signed roots (product K/A < 0), so
@@ -581,7 +580,7 @@ def _fieller_shape(
             f"1); the degenerate half-line's boundary (rho >= {boundary!r}) is at or below "
             "zero, so the confidence set intersected with the positive parameter space is "
             "exactly (0, inf) -- reporting shape=UNBOUNDED, exact rather than a lossy superset "
-            "for this sub-case (decisions/0017, decisions/0022)"
+            "for this sub-case"
         )
         return IntervalShape.UNBOUNDED, None, None, (warning,)
 
@@ -610,7 +609,7 @@ def _fieller_shape(
         "ratio_interval: the Fieller quadratic's leading coefficient A is exactly 0 (g == 1); "
         f"the true confidence set is a half-line ({note}), which IntervalShape has no member "
         "for in this direction -- reporting shape=UNBOUNDED, which is exact here rather than "
-        "clipping it to look bounded (decisions/0017)"
+        "clipping it to look bounded"
     )
     return IntervalShape.UNBOUNDED, None, None, (warning,)
 
@@ -680,7 +679,7 @@ def _propagate_censoring(
             collected_warnings.append(
                 "ratio_interval: threshold_a and threshold_b have different failure statuses "
                 f"(threshold_a={t_a.status!s}, threshold_b={t_b.status!s}); threshold_a's "
-                "status is reported (decisions/0015)"
+                "status is reported"
             )
     elif a_failed:
         status = t_a.status
@@ -698,8 +697,7 @@ def _propagate_censoring(
         collected_warnings.append(
             "ratio_interval: both threshold_a and threshold_b carry censoring "
             f"(threshold_a={a_dir!s}, threshold_b={b_dir!s}); there is no coherent direction "
-            f"for the ratio's bound, so threshold_a's flag ({a_dir!s}) is reported "
-            "(decisions/0015)"
+            f"for the ratio's bound, so threshold_a's flag ({a_dir!s}) is reported"
         )
     elif a_has_direction:
         censoring = a_dir
@@ -804,9 +802,9 @@ def ratio_interval(
         )
     if dependence == "paired":
         raise ValueError(
-            "ratio_interval: dependence='paired' is not implemented until v0.2 Phase 9 (plan "
-            "section 5.6, D6); pass dependence='independent' explicitly to acknowledge "
-            "independence is being assumed anyway, or wait for Phase 9"
+            "ratio_interval: dependence='paired' is not implemented in this release; pass "
+            "dependence='independent' explicitly to acknowledge independence is being assumed "
+            "anyway, or wait for a future release that adds it"
         )
     if dependence not in _VALID_DEPENDENCE:
         raise ValueError(
@@ -825,16 +823,16 @@ def ratio_interval(
     if dependence == "independent" and t_a.fit is t_b.fit:
         raise ValueError(
             "ratio_interval: threshold_a.fit and threshold_b.fit are the very same Fit object, "
-            "which is incompatible with dependence='independent' (decisions/0018 amendment). "
-            "This is an object-identity check only, not a value-equality one: two disjoint "
-            "samples may legitimately produce an equal Fit by value, and that ratio is valid."
+            "which is incompatible with dependence='independent'. This is an object-identity "
+            "check only, not a value-equality one: two disjoint samples may legitimately "
+            "produce an equal Fit by value, and that ratio is valid."
         )
 
     if level is None:
         if t_a.level != t_b.level:
             raise ValueError(
                 "ratio_interval: level=None inherits the confidence level from threshold_a and "
-                f"threshold_b, which must agree (decisions/0016); got threshold_a.level="
+                f"threshold_b, which must agree; got threshold_a.level="
                 f"{t_a.level!r} and threshold_b.level={t_b.level!r}"
             )
         resolved_level = t_a.level
@@ -845,7 +843,7 @@ def ratio_interval(
         if level != t_a.level or level != t_b.level:
             raise ValueError(
                 f"ratio_interval: level={level!r} does not match threshold_a.level "
-                f"({t_a.level!r}) and/or threshold_b.level ({t_b.level!r}) (decisions/0016)"
+                f"({t_a.level!r}) and/or threshold_b.level ({t_b.level!r})"
             )
         resolved_level = level
 

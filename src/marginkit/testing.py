@@ -268,7 +268,7 @@ def fake_threshold(
     if (status, censoring) not in _ALLOWED_THRESHOLD_COMBINATIONS:
         raise ValueError(
             f"fake_threshold: status={status!r} with censoring={censoring!r} is not a "
-            "combination plan section 5.5 allows for a Threshold"
+            "combination Threshold allows"
         )
 
     fit = fake_fit(status=_FIT_STATUS_FOR_THRESHOLD_STATUS[status])

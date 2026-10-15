@@ -135,8 +135,7 @@ _SCORE_TOLERANCE_FACTOR = 1e-4
 # fitting paths (W5).
 _WRONG_SIGN_OR_FLAT_WARNING = (
     "fit_dose_response: the fitted curve has no interior maximum for direction='decreasing' "
-    "(a wrong-sign slope, or a curve that is flat up to rounding) -- no finite (mu, s) exists "
-    "(decisions/0005)"
+    "(a wrong-sign slope, or a curve that is flat up to rounding) -- no finite (mu, s) exists"
 )
 
 
@@ -454,7 +453,7 @@ class Fit:
         if self.model == "binomial" and self.direction != "decreasing":
             raise ValueError(
                 "Fit: model='binomial' only supports direction='decreasing' in this release; "
-                "an increasing-is-worse definition is pending owner decision D5"
+                "an increasing-is-worse definition is planned for v0.2"
             )
         allowed_links = _VALID_LINKS[self.model]
         if self.link not in allowed_links:
@@ -485,10 +484,9 @@ class Fit:
             self.diagnostics is not None or self.monotonicity is not None
         ):
             raise ValueError(
-                f"Fit.schema_version={self.schema_version!r} predates diagnostics/monotonicity "
-                "(decisions/0023 Amendment 2): a Fit tagged with schema_version '1' or '2' must "
-                "have both fields None, since that schema version's own document has no such "
-                "property"
+                f"Fit.schema_version={self.schema_version!r} predates diagnostics/monotonicity: "
+                "a Fit tagged with schema_version '1' or '2' must have both fields None, since "
+                "that schema version's own serialised form has no such property"
             )
 
         is_ok = self.status is Status.OK
@@ -1277,7 +1275,7 @@ def _boundary_warning(
             return (
                 "fit_dose_response: the estimated lower asymptote reached the parameter "
                 f"boundary (logit-scale a={a_value!r}, |a| > {_ASYMPTOTE_LOGIT_BOUND}) -- no "
-                "interior maximum exists (decisions/0005)"
+                "interior maximum exists"
             )
     if estimate_upper:
         b_value = float(final_params[idx])
@@ -1285,13 +1283,13 @@ def _boundary_warning(
             return (
                 "fit_dose_response: the estimated upper asymptote reached the parameter "
                 f"boundary (logit-scale b={b_value!r}, |b| > {_ASYMPTOTE_LOGIT_BOUND}) -- no "
-                "interior maximum exists (decisions/0005)"
+                "interior maximum exists"
             )
     if estimate_lower and estimate_upper and lower < _ASYMPTOTE_PROBABILITY_EPS:
         return (
             "fit_dose_response: the estimated lower asymptote reached the probability "
             f"boundary (lower={lower!r} < {_ASYMPTOTE_PROBABILITY_EPS}) -- no interior maximum "
-            "exists (decisions/0005)"
+            "exists"
         )
     if estimate_lower and not estimate_upper and (upper - lower) < _ASYMPTOTE_PROBABILITY_EPS:
         # C2 (decisions/0005 amendment): with a fixed upper, l = u * expit(a) ranges over
@@ -1306,13 +1304,13 @@ def _boundary_warning(
         return (
             "fit_dose_response: the estimated lower asymptote reached the probability "
             f"boundary near the fixed upper asymptote (upper - lower = {upper - lower!r} < "
-            f"{_ASYMPTOTE_PROBABILITY_EPS}) -- no interior maximum exists (decisions/0005)"
+            f"{_ASYMPTOTE_PROBABILITY_EPS}) -- no interior maximum exists"
         )
     if estimate_upper and upper > 1.0 - _ASYMPTOTE_PROBABILITY_EPS:
         return (
             "fit_dose_response: the estimated upper asymptote reached the probability "
             f"boundary (upper={upper!r} > 1 - {_ASYMPTOTE_PROBABILITY_EPS}) -- no interior "
-            "maximum exists (decisions/0005)"
+            "maximum exists"
         )
     return None
 
@@ -1345,7 +1343,33 @@ def _fit_generic(
     never a hand-rolled Newton or IRLS loop (hard constraint 2).
     """
     axis = obs.axis
-    severity, successes, trials = _cells_to_arrays(cells)
+
+    # Drop a structurally zero-contribution zero-severity control row before building the
+    # optimizer's own data (R10 "Still open" item 1, predates Phase 7's stats review as W3):
+    # with `upper` fixed at exactly 1.0 on a log axis, `_curve_success_probability`'s own R3
+    # rule pins this cell's fitted probability to exactly `upper` for every possible mu/s/lower,
+    # so its log-likelihood contribution is an exact constant with respect to every parameter
+    # this path estimates -- by the time `_fit_generic` is reached with upper fixed at 1.0,
+    # `_check_control_incompatible` has already ruled out a control with any failures here, so
+    # that constant is exactly 0. Leaving that row in the data had two distinct effects on the
+    # fit, not one, and this exclusion removes both at once: (1) `_pilot_start`'s own
+    # `upper_start` reads the *control's* rate when one is present (here, exactly 1.0) rather
+    # than the maximum rate among the other levels (here, about 0.96), which moved the pilot
+    # `mu0`/`s0` the real optimizer started from; (2) `GenericLikelihoodModel.fit` (statsmodels'
+    # own optimizer, not one of ours) minimises `-loglike(params) / nobs`, where `nobs` is the
+    # row count it was built with, so a zero-contribution row changes `nobs` and, with it, the
+    # scale at which `gtol`/`tol` judge convergence, even though the likelihood function itself
+    # is unchanged at every parameter value. Excluding it here mirrors `_fit_glm`'s own
+    # `fit_cells` exclusion below, and keeps both the pilot start and `nobs` identical to a fit
+    # over the same data with no control row at all. An *estimated* upper is never exempt: the
+    # zero_control branch then reports `upper` itself, a free parameter, so the control
+    # genuinely identifies it and must stay in the optimizer's data.
+    fit_cells = (
+        tuple(c for c in cells if c.severity != 0.0)
+        if axis.scale == "log" and not upper_is_estimate and upper_value == 1.0
+        else cells
+    )
+    severity, successes, trials = _cells_to_arrays(fit_cells)
 
     # Centre and scale the transformed covariate before either the pilot or the real optimiser
     # ever sees it (stats-review fix: a fit must not depend on the caller's choice of severity
@@ -1589,10 +1613,14 @@ def _fit_generic(
             ),
         )
 
+    # The reported log-likelihood is always the full binomial log-likelihood over every cell
+    # (`Fit.cells`, including a control `fit_cells` dropped above) -- `fit_cells`/`severity` etc.
+    # above are the optimizer's own reduced view, not what gets reported.
+    all_severity, all_successes, all_trials = _cells_to_arrays(cells)
     log_likelihood = _full_binomial_log_likelihood(
-        severity,
-        successes,
-        trials,
+        all_severity,
+        all_successes,
+        all_trials,
         mu=mu,
         s=s,
         upper=upper,
@@ -1865,7 +1893,7 @@ def _check_control_incompatible(
     return (
         "fit_dose_response: the zero-severity control has failures but upper=1.0 is fixed, "
         'which drives the likelihood to zero on a log axis; refit with upper="estimate" '
-        "(plan section 5.1)"
+        "instead"
     )
 
 
@@ -2010,7 +2038,7 @@ def fit_dose_response(
         raise ValueError(
             "fit_dose_response: direction='increasing' is not supported in this release "
             "(model='binomial' only supports 'decreasing'; an increasing-is-worse definition "
-            "is pending owner decision D5)"
+            "is planned for v0.2)"
         )
 
     # decisions/0023 Amendment 1, item 1: computed from the raw Observations before a fitting
@@ -2043,6 +2071,23 @@ def fit_dose_response(
                 fit_warnings=(control_incompatible_warning,),
             ),
             monotonicity=monotonicity,
+        )
+
+    # Owner decision 2026-10-15: a log-axis observation whose only severity level is the
+    # zero-severity control (R3's own "no covariate value at all" case, now with nothing *else*
+    # in the data either) has no likelihood-contributing level at all. Left unchecked, this
+    # reaches `_centering_and_scale`/`_transformed_span` (both fitting paths) with an empty
+    # nonzero-severity array and fails with numpy's own unhelpful "zero-size array to reduction
+    # operation maximum which has no identity" rather than a message this package wrote itself.
+    # Checked once, here, before either fitting path is chosen -- after
+    # `_check_control_incompatible` so a control with failures still reports
+    # CONTROL_INCOMPATIBLE, and before `_check_separation` so a control plus exactly one other
+    # level still reaches that check and reports SEPARATION as before.
+    if obs.axis.scale == "log" and not any(c.severity != 0.0 for c in cells):
+        raise ValueError(
+            "fit_dose_response: this observation has no severity level besides the "
+            "zero-severity control; a dose-response curve needs at least one severity level "
+            "besides the control"
         )
 
     separation_warning = _check_separation(cells, axis=obs.axis)

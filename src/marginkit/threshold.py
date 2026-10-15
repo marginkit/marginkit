@@ -187,7 +187,7 @@ class Threshold:
         if self.direction != "decreasing":
             raise ValueError(
                 "Threshold: direction='increasing' is not supported in this release; an "
-                "increasing-is-worse definition is pending owner decision D5"
+                "increasing-is-worse definition is planned for v0.2"
             )
         if self.interval_method not in _VALID_INTERVAL_METHODS:
             raise ValueError(
@@ -413,14 +413,14 @@ def _resolve_target(definition: Definition, *, fit: Fit) -> tuple[float, str | N
                 f"target, and fit.status is {fit.status!r} (no fitted asymptotes). There is no "
                 "defensible fallback for the lower asymptote -- nothing in the data speaks to "
                 "it -- so no target is resolved. Use absolute(a), which needs no asymptote, or "
-                "baseline_fraction(p), which needs only the control rate (decisions/0008)"
+                "baseline_fraction(p), which needs only the control rate"
             )
         control = _control_cell_or_none(fit)
         if control is None:
             raise ValueError(
                 f"threshold: definition.kind={definition.kind!r} needs an upper asymptote to "
                 f"resolve a target, fit.status is {fit.status!r} (no fitted asymptotes), and "
-                "there is no zero-severity control cell to fall back to (decisions/0008)"
+                "there is no zero-severity control cell to fall back to"
             )
         upper = control.successes / control.trials
         lower = 0.0
@@ -428,7 +428,7 @@ def _resolve_target(definition: Definition, *, fit: Fit) -> tuple[float, str | N
             f"threshold: fit.status is {fit.status!r} (no fitted asymptotes); the target for "
             f"definition.kind={definition.kind!r} was resolved from the zero-severity control "
             f"cell's observed rate ({control.successes}/{control.trials} = {upper!r}), not a "
-            "fitted upper asymptote (decisions/0008)"
+            "fitted upper asymptote"
         )
 
     if definition.kind == "baseline_fraction":
@@ -494,9 +494,9 @@ def threshold(
 
     if dependence == "paired":
         raise ValueError(
-            "threshold: dependence='paired' is not implemented until v0.2 Phase 9 (plan §5.6, "
-            "D6); pass dependence='independent' explicitly to acknowledge independence is being "
-            "assumed anyway, or wait for Phase 9"
+            "threshold: dependence='paired' is not implemented in this release; pass "
+            "dependence='independent' explicitly to acknowledge independence is being assumed "
+            "anyway, or wait for a future release that adds it"
         )
     if dependence is not None and dependence not in _VALID_DEPENDENCE_INPUTS:
         raise ValueError(
@@ -524,9 +524,8 @@ def threshold(
         )
         collected_warnings.append(
             "NON_MONOTONE_DATA: threshold: fit.monotonicity flags an adjacent-level reversal "
-            f"at severity pair(s) {flagged_pairs} (decisions/0023 Amendment 1); every threshold "
-            "rule and every fitted model here assume the true performance curve is monotone in "
-            "severity"
+            f"at severity pair(s) {flagged_pairs}; every threshold rule and every fitted model "
+            "here assume the true performance curve is monotone in severity"
         )
 
     classification = classify(fit, target=target, level=level)
@@ -545,8 +544,8 @@ def threshold(
                 "threshold: the fitted curve is already below the target at severity 0 -- it "
                 f"crosses at {value!r}, at or below the axis origin, so on this axis the "
                 "criterion fails before any severity is applied. Reported as UNREACHABLE "
-                "because a v0.1 severity axis is non-negative and v1 has no model-based "
-                "equivalent of FAILS_AT_BASELINE (decisions/0014)"
+                "because this release's severity axis is non-negative and there is no "
+                "model-based equivalent of FAILS_AT_BASELINE for this case"
             )
             return Threshold(
                 axis=fit.axis,

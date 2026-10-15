@@ -280,6 +280,43 @@ class TestPpoSensorNoiseNonMonotoneContradiction:
 
         assert any(w.startswith("NON_MONOTONE: ") for w in t.warnings)
 
+    def test_warning_does_not_mention_a_fitted_curve_when_lo_and_hi_are_both_none(self) -> None:
+        """`censoring._contradiction_warning` is shared by the converged path
+        (``_contradiction_or_none``, where ``lo``/``hi`` genuinely do come from the fitted
+        curve's own profile/delta interval) and this failed-fit fallback
+        (``_exact_bound_fallback``/``_contradiction_or_none``'s non-OK branch, where there is no
+        fitted curve at all and ``t.lo``/``t.hi`` are both ``None``). The wording is only honest
+        on the first of those two callers -- on this one, a phrase like "any lo/hi this
+        Threshold carries comes from the fitted curve instead" implies bounds exist somewhere on
+        this object, which is false: there is no fitted curve (``status`` is ``SEPARATION``) and
+        no bounds at all.
+        """
+        obs = _observations_for(
+            "ppo_sensor_noise", axis_name="sensor_noise", axis_unit="m", axis_scale="log"
+        )
+        fit = fit_dose_response(obs, model="binomial", link="probit", upper="estimate", lower=0.0)
+        assert fit.status is Status.SEPARATION
+
+        t = threshold(
+            fit,
+            definition=Definition.absolute(self._TARGET),
+            interval_method="profile",
+            level=_LEVEL,
+        )
+
+        assert t.status is Status.SEPARATION
+        assert t.lo is None
+        assert t.hi is None
+
+        non_monotone = next(w for w in t.warnings if w.startswith("NON_MONOTONE: "))
+        assert "fitted curve" not in non_monotone, (
+            "misleading on the failed-fit fallback -- there is no fitted curve, and this "
+            f"Threshold's lo/hi are both None: {non_monotone!r}"
+        )
+        assert "fitted model" not in non_monotone, (
+            f"same defect, different wording: {non_monotone!r}"
+        )
+
 
 class TestPpoMassSignedAxis:
     """``ppo_mass`` is signed (``-0.2`` .. ``+0.2``); ``Observations`` rejects negative
