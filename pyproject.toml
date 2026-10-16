@@ -1,10 +1,10 @@
-# robustmargin packaging. Packaging is the deliverable (CLAUDE.md hard constraint 6), so this
-# file is load-bearing from the first commit of source rather than something added later.
+# robustmargin packaging: setuptools, a src/ layout, an SPDX license expression, a py.typed
+# marker and Python 3.11+.
 
 [build-system]
 # setuptools >= 77 is required, not >= 68: PEP 639's SPDX string form of `license` and the
-# `license-files` key both landed in 77. The older `license = { text = ... }` table form does
-# not satisfy hard constraint 6's "SPDX license field".
+# `license-files` key both landed in 77. The older `license = { text = ... }` table form is not
+# an SPDX license expression.
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
@@ -32,10 +32,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# Exactly the allowlist in CLAUDE.md hard constraint 1, and nothing else. Floors stay loose
-# and are tested at the floor in CI (plan R9) so robustmargin never forces a numpy or scipy
-# version onto a consumer's environment. `ci/constraints-min.txt` is the second copy of these
-# three numbers; if the two disagree, that is a finding.
+# The only runtime dependencies, deliberately: no GPU, ML-framework or domain-specific package.
+# Floors stay loose and CI tests at the floor, so robustmargin never forces a numpy or scipy
+# version onto a consumer's environment. `ci/constraints-min.txt` holds the same three numbers;
+# if the two disagree, one of them is wrong.
 dependencies = [
     "numpy>=1.26",
     # 1.11.1, not 1.11.0: scipy 1.11.0 was yanked from PyPI for a licence violation, so it is
@@ -84,9 +84,8 @@ target-version = "py311"
 # ruff 0.5 enabled roughly sixty. `dev` declares `ruff>=0.5` with a loose floor, so relying on
 # the default would let a ruff release change what CI enforces without any change here.
 #
-# E and F are what zeta-bench's configuration effectively selected when it was written. `I` is
-# the one deliberate addition: pre-PR audit 1 is a human eyeballing every import line against
-# the dependency allowlist, and that is only feasible if imports are sorted and grouped.
+# E and F are the pycodestyle errors and pyflakes. `I` (isort) is added so that every import is
+# sorted and grouped, which keeps a review of imports against the dependency list feasible.
 select = ["E", "F", "I"]
 
 [tool.mypy]
@@ -98,19 +97,19 @@ strict = true
 # Neither statsmodels nor scipy ships a `py.typed` marker, so mypy cannot see their types.
 # (numpy does, and is deliberately absent from this list.) A module-level override keeps the
 # suppression in one declared place instead of spraying `# type: ignore` comments through the
-# source, which pre-PR audit 3 greps for and treats as a finding.
+# source.
 module = ["statsmodels.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "slow: coverage simulations and other long-running checks (plan section 6.3)",
+    "slow: coverage simulations and other long-running checks",
 ]
 addopts = [
     "-v",
     "--strict-markers",
-    # Plan section 6.3's coverage simulations are 2,000 replicates per design and are marked
+    # The coverage simulations are 2,000 replicates per design and are marked
     # `slow`. They are excluded here so the default run -- and every leg of CI's four-way
     # matrix, which invokes a bare `pytest` -- stays fast, and so the 90% gate below measures
     # the fast suite. Run them with `pytest -m slow --no-cov`; a later `-m` overrides this one.

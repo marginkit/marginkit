@@ -60,7 +60,7 @@ __all__ = ["SCHEMA_VERSION", "Scorecard", "from_dict", "load_schema", "to_dict"]
 
 SCHEMA_VERSION = "4"
 
-# `from_dict` reads schema "4" only (`decisions/0027`, a recorded exception to Appendix B item 4).
+# `from_dict` reads schema "4" only; earlier schema versions are not read.
 _SUPPORTED_SCHEMA_VERSIONS: frozenset[str] = frozenset({"4"})
 
 # `"1"`, `"2"` and `"3"` were the card format of this package's former name, `marginkit`. They are
@@ -256,8 +256,8 @@ def _schema_required_by_type() -> dict[str, frozenset[str]]:
     ``"type"`` removed -- ``from_dict`` checks ``"type"`` itself, separately.
 
     Read from :func:`load_schema` rather than duplicated as a literal list, so a required field
-    can never drift between the schema and ``from_dict`` without ``TestSchemaFieldParity`` (or
-    this function's own malformed-schema check) catching it (round 4 section 3).
+    can never drift between the schema and ``from_dict`` without the schema/``from_dict`` field
+    parity test (or this function's own malformed-schema check) catching it.
     """
     schema = load_schema()
     root_required = schema.get("required")
@@ -470,7 +470,7 @@ def _adjacent_pair_from_dict(data: object, card_version: str | None) -> Adjacent
 
 def _monotonicity_check_from_dict(data: object, card_version: str | None) -> MonotonicityCheck:
     """``MonotonicityCheck`` is an untagged helper, like ``BaselineRate``: it only ever appears
-    as ``Fit.monotonicity`` (`decisions/0023` "Amendment 1").
+    as ``Fit.monotonicity``.
     """
     fields = _validated_fields(MonotonicityCheck, data, tagged=False, card_version=card_version)
     fields["pairs"] = tuple(_adjacent_pair_from_dict(p, card_version) for p in fields["pairs"])
@@ -479,7 +479,7 @@ def _monotonicity_check_from_dict(data: object, card_version: str | None) -> Mon
 
 def _diagnostics_from_dict(data: object, card_version: str | None) -> Diagnostics:
     """``Diagnostics`` is an untagged helper, like ``BaselineRate``: it only ever appears as
-    ``Fit.diagnostics`` (`decisions/0023`).
+    ``Fit.diagnostics``.
     """
     fields = _validated_fields(Diagnostics, data, tagged=False, card_version=card_version)
     fields["link_status"] = {k: Status(v) for k, v in fields["link_status"].items()}

@@ -7,6 +7,13 @@ check (CLAUDE.md, on second copies of a rule).
 A missing ``py.typed`` fails silently and disables type checking for every consumer, and
 ``load_schema(version)`` reads the packaged schemas at runtime, so both are asserted inside the
 built wheel rather than merely on disk.
+
+Both artifacts are also checked against an allowlist of what may ship: the package's modules,
+``py.typed``, the score-card schema, ``LICENSE``, ``pyproject.toml``, the build's own metadata,
+and ``README.md`` as the only documentation, since it is the PyPI project page. The planning
+documents, ``CHANGELOG.md``, tests and tools never ship. The check is an allowlist rather than
+a list of known-private paths, so a new file in an artifact fails it until someone decides it
+belongs there.
 """
 
 from __future__ import annotations
@@ -14,8 +21,22 @@ from __future__ import annotations
 import argparse
 import glob
 import pathlib
+import re
 import tarfile
 import zipfile
+
+# Top-level modules only: a new subpackage fails this check until it is added deliberately.
+_PACKAGE = r"robustmargin/(?:[A-Za-z_][A-Za-z0-9_]*\.py|py\.typed|schema/scorecard-v[0-9]+\.json)"
+_WHEEL_ALLOWED = re.compile(
+    rf"{_PACKAGE}"
+    r"|robustmargin-[^/]+\.dist-info/(?:METADATA|WHEEL|RECORD|top_level\.txt|licenses/LICENSE)"
+)
+_SDIST_ALLOWED = re.compile(
+    r"PKG-INFO|setup\.cfg|pyproject\.toml|README\.md|LICENSE"
+    rf"|src/{_PACKAGE}"
+    r"|src/robustmargin\.egg-info/"
+    r"(?:PKG-INFO|SOURCES\.txt|dependency_links\.txt|requires\.txt|top_level\.txt)"
+)
 
 
 def main() -> None:
@@ -44,16 +65,26 @@ def main() -> None:
     for schema in expected_schemas:
         assert schema in names, f"{schema} missing from {wheel}"
 
-    members = tarfile.open(sdist).getnames()
-    assert any(n.endswith("/LICENSE") for n in members), f"LICENSE missing from {sdist}"
-    # The planning documents are deliberately private (.gitignore). A build from a clean
-    # checkout never contains them; this catches a build from a working tree that does.
-    private = [
+    unexpected_wheel = [n for n in names if not n.endswith("/") and not _WHEEL_ALLOWED.fullmatch(n)]
+    assert not unexpected_wheel, f"files not on the allowlist in {wheel}: {unexpected_wheel}"
+
+    # Members are prefixed by the sdist's top-level directory, `robustmargin-<version>/`.
+    with tarfile.open(sdist) as tar:
+        members = [
+            m.name.split("/", 1)[1] for m in tar.getmembers() if m.isfile() and "/" in m.name
+        ]
+    assert "LICENSE" in members, f"LICENSE missing from {sdist}"
+    assert "README.md" in members, f"README.md missing from {sdist}"
+    unexpected_sdist = [n for n in members if not _SDIST_ALLOWED.fullmatch(n)]
+    assert not unexpected_sdist, f"files not on the allowlist in {sdist}: {unexpected_sdist}"
+    docs = sorted(
         n
-        for n in members
-        if "/.claude/" in n or n.endswith("/CLAUDE.md") or ("/docs/" in n and "PROVENANCE" not in n)
-    ]
-    assert not private, f"private files in {sdist}: {private}"
+        for n in members + names
+        if n.lower().endswith((".md", ".rst", ".txt"))
+        and "egg-info" not in n
+        and "dist-info" not in n
+    )
+    assert docs == ["README.md"], f"README.md must be the only shipped document, found {docs}"
 
     if args.expect_version is not None:
         for artifact in (wheel, sdist):
@@ -64,7 +95,8 @@ def main() -> None:
 
     print(
         f"py.typed and {len(expected_schemas)} schema file(s) present in wheel "
-        f"({', '.join(expected_schemas)}); LICENSE present and no private files in sdist"
+        f"({', '.join(expected_schemas)}); LICENSE present; every file in both artifacts is on "
+        f"the allowlist, and README.md is the only document shipped"
         + (f"; version {args.expect_version} confirmed" if args.expect_version else "")
     )
 

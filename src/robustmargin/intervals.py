@@ -1,13 +1,12 @@
-"""Confidence intervals for a solved threshold (plan section 5.4): profile likelihood (the
-primary method) and the delta method (the cross-check).
+"""Confidence intervals for a solved threshold: profile likelihood (the primary method) and the
+delta method (the cross-check).
 
 Both operate on the transformed axis ``theta`` -- ``log(severity)`` on a log axis, raw severity
 on a linear axis -- and map back to the natural severity scale before returning, per
 :func:`robustmargin.threshold.threshold`'s contract. :func:`solve_value` is the shared closed-form
-step (plan section 5.3): ``theta_hat = mu + s * z*``, where
-``z* = F^-1((upper - target) / (upper - lower))``.
+step: ``theta_hat = mu + s * z*``, where ``z* = F^-1((upper - target) / (upper - lower))``.
 
-**Profile likelihood.** With both asymptotes fixed, plan section 5.4's offset trick applies
+**Profile likelihood.** With both asymptotes fixed, the offset trick applies
 exactly: a no-intercept ``GLM`` on the failure rate, covariate ``t - theta``, offset ``z*``
 (constant, since fixed asymptotes make ``z*`` fixed too). With an estimated asymptote the offset
 trick does not apply, because ``z* = F^-1((u - P*) / (u - l))`` moves with the candidate ``(u,
@@ -15,9 +14,9 @@ l)`` the constrained optimiser is trying at each step (and ``P*`` itself moves w
 ``baseline_fraction``): the substitution ``mu = theta - s * z*(u, l)`` is folded directly into
 the log-likelihood instead, handed to ``statsmodels.base.model.GenericLikelihoodModel`` with the
 same ``bfgs`` -> ``newton`` sequence the estimated-asymptote fit itself uses
-(``decisions/0004``: a likelihood for a statsmodels optimiser, never a hand-rolled one). A
-candidate ``(u, l)`` that makes ``P*`` unreachable, or an inner fit that fails outright, opens
-that side of the search rather than returning a number (hard constraint 3).
+(a likelihood for a statsmodels optimiser, never a hand-rolled one). A candidate ``(u, l)`` that
+makes ``P*`` unreachable, or an inner fit that fails outright, opens that side of the search rather
+than returning a number (a failed fit never carries a number).
 
 Both ``ell_hat`` and ``ell_p(theta)`` are computed with
 ``robustmargin.models._full_binomial_log_likelihood`` at natural-scale parameters -- the inner GLM
@@ -30,7 +29,7 @@ log-axis control row otherwise do not agree term for term).
 and -- when an asymptote is estimated -- ``d(theta)/d(u) = s * (1 / f(z*)) * d(q)/d(u)``
 (mirrored for ``l``), where ``q = (u - P*) / (u - l)`` and ``f`` is the link's density. The
 variance of ``theta`` is computed on the transformed axis directly with ``fit.covariance``
-(observed information, ``decisions/0007``), then converted to a *log-scale* standard error even
+(observed information), then converted to a *log-scale* standard error even
 on a linear axis (``sigma_log = sigma_theta / value``) before exponentiating around ``value`` --
 this is what keeps the interval positive and equivariant under ``x -> c * x`` regardless of
 axis.
@@ -65,7 +64,7 @@ from robustmargin.types import Censoring, Definition, _check_finite_number
 
 __all__ = ["IntervalResult", "delta_interval", "profile_interval", "solve_value"]
 
-# plan section 5.4: the profile search brackets outward from theta_hat to this limit before
+# The profile search brackets outward from theta_hat to this limit before
 # giving up and reporting that side open. Log axis: additive in log(x); linear axis:
 # multiplicative in x (an additive log(100) on a linear axis would be unit-dependent).
 _SEARCH_MULTIPLE = 100.0
@@ -105,7 +104,7 @@ class IntervalResult:
 
 
 # ------------------------------------------------------------------------------------------
-# Shared: the link's inverse CDF and density, z*, and the closed-form solve (plan section 5.3).
+# Shared: the link's inverse CDF and density, z*, and the closed-form solve.
 # ------------------------------------------------------------------------------------------
 
 
@@ -136,7 +135,7 @@ def _z_star(link: str, *, upper: float, lower: float, target: float) -> float | 
 
 
 def _target_for(definition: Definition, *, upper: float, lower: float) -> float:
-    """§5.3's target performance, as a function of a *candidate* ``(upper, lower)`` -- used by
+    """The target performance, as a function of a *candidate* ``(upper, lower)`` -- used by
     the estimated-asymptote profile path, where the candidate asymptotes move at every inner
     evaluation. ``absolute`` does not depend on them at all.
     """
@@ -149,7 +148,7 @@ def _target_for(definition: Definition, *, upper: float, lower: float) -> float:
 
 def _dq_du_dl(definition: Definition, *, upper: float, lower: float) -> tuple[float, float]:
     """``d(q)/d(upper)`` and ``d(q)/d(lower)`` for ``q = (upper - P*) / (upper - lower)``, per
-    definition kind (plan section 5.4 / this module's docstring)."""
+    definition kind (this module's docstring)."""
     spread = upper - lower
     if definition.kind == "absolute":
         a = definition.value
@@ -165,7 +164,7 @@ def _to_natural(theta: float, *, scale: str) -> float:
 
 
 def solve_value(fit: Fit, *, target: float) -> tuple[float, float]:
-    """The closed-form threshold (plan section 5.3), from the fit's own point estimates.
+    """The closed-form threshold, from the fit's own point estimates.
 
     Parameters
     ----------
@@ -195,13 +194,13 @@ def solve_value(fit: Fit, *, target: float) -> tuple[float, float]:
 
 def _theta_variance(fit: Fit, *, definition: Definition, target: float) -> float:
     """``Var(theta)`` on the *transformed* axis (``log(severity)`` on a log axis, raw severity on
-    a linear one) -- the delta-method gradient assembly plan section 5.4 and this module's
-    docstring describe, factored out of :func:`delta_interval` so :mod:`robustmargin.ratio` can
-    reuse the exact same computation for its Fieller and log-delta variance inputs (plan section
-    5.6) instead of reconstructing the gradient a second time, which would risk the two drifting
-    apart. Not converted to a natural-scale or log-scale standard error here -- callers each do
-    that conversion themselves, since Fieller and a single threshold's own delta interval need it
-    on different scales (:mod:`robustmargin.ratio`'s module docstring).
+    a linear one) -- the delta-method gradient assembly this module's docstring describes,
+    factored out of :func:`delta_interval` so :mod:`robustmargin.ratio` can reuse the exact same
+    computation for its Fieller and log-delta variance inputs instead of reconstructing the
+    gradient a second time, which would risk the two drifting apart. Not converted to a
+    natural-scale or log-scale standard error here -- callers each do that conversion themselves,
+    since Fieller and a single threshold's own delta interval need it on different scales
+    (:mod:`robustmargin.ratio`'s module docstring).
 
     Private: not part of the public API. Callable across modules (``robustmargin.ratio`` imports it
     directly) without being exported from either module's ``__all__``.
@@ -263,7 +262,7 @@ def _llf_hat(fit: Fit) -> float:
 def _search_limits(fit: Fit) -> tuple[float, float]:
     """``(lower_limit, upper_limit)`` on theta's own scale: additive ``log(_SEARCH_MULTIPLE)``
     beyond the tested (nonzero, on a log axis) range for a log axis; multiplicative by
-    ``_SEARCH_MULTIPLE`` for a linear one (plan section 5.4)."""
+    ``_SEARCH_MULTIPLE`` for a linear one."""
     severities = [c.severity for c in fit.cells]
     if fit.axis.scale == "log":
         nonzero = [s for s in severities if s > 0.0]
@@ -395,8 +394,8 @@ def _fixed_profile_llf(
     """``ell_p(theta)`` for the fixed-asymptote path: fit the no-intercept offset GLM at this
     ``theta`` (an *optimiser*, per this module's docstring), then evaluate the full likelihood
     at the resulting ``(mu, s)``. Returns ``None`` (an inner-fit failure) when the GLM does not
-    converge or its fitted slope is non-positive -- plan section 5.4: "a wrong-sign slope means
-    the profile value is the flat-curve boundary", so that side never closes there.
+    converge or its fitted slope is non-positive -- a wrong-sign slope means the profile value
+    is the flat-curve boundary, so that side never closes there.
     """
     covariate = (_transform(nonzero_severity, scale=scale) - theta).reshape(-1, 1)
     failures = nonzero_trials - nonzero_successes
@@ -405,8 +404,8 @@ def _fixed_profile_llf(
 
     try:
         with warnings.catch_warnings():
-            # `decisions/0006`: on grouped binomial data statsmodels' PerfectSeparationWarning
-            # fires on any exact fit, so it carries no information here and maps to no status.
+            # On grouped binomial data statsmodels' PerfectSeparationWarning fires on any
+            # exact fit, so it carries no information here and maps to no status.
             # Separation is decided by the pre-fit overlap check, before this function runs.
             warnings.filterwarnings("ignore", category=PerfectSeparationWarning)
             model = GLM(
@@ -564,7 +563,7 @@ class _MuSubstitutedLogLikelihood:
 def _optimizer_start_from_fit(fit: Fit) -> NDArray[np.float64]:
     """A starting point for the constrained (mu-substituted) optimiser, from the *fit's own*
     converged natural-scale parameters -- a good start, since the profile is centred on it, but
-    only a start (plan section 5.1 point 5's "only a starting point" applies here too)."""
+    only a start (as for the outer fit, a starting point is never itself reported)."""
     assert fit.params is not None
     s = fit.params["s"].value
     lower_param = fit.params["lower"]
@@ -622,7 +621,7 @@ def _estimated_profile_llf(theta: float, *, fit: Fit, definition: Definition) ->
     # BFGS profile value underneath it: `ell_p` too low inflates `2 * (llf_hat - ell_p)`, which
     # moves `g`'s crossing closer to `theta_hat` and ships a silently *too narrow* interval.
     # Taking the maximum is the conservative direction, and mirrors the guard `models.py`
-    # already applies to the outer fit (`decisions/0005`'s amendment).
+    # already applies to the outer fit.
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -677,8 +676,7 @@ def _profile_interval_estimated(
 def profile_interval(
     fit: Fit, *, definition: Definition, target: float, level: float, theta_hat: float
 ) -> IntervalResult:
-    """The profile-likelihood interval for a solved threshold (plan section 5.4, primary
-    method).
+    """The profile-likelihood interval for a solved threshold (the primary method).
 
     Parameters
     ----------
@@ -701,11 +699,11 @@ def profile_interval(
     """
     _check_finite_number(level, label="profile_interval level")
     assert fit.params is not None
-    # Dispatch on the asymptote *values*, not on their `fixed` flags. The offset trick of plan
-    # section 5.4 models the raw failure rate, `P(failure) = F(z)`, which is an identity only at
-    # `u = 1, l = 0`. For any other fixed pair the modelled quantity is `(u - P) / (u - l)`, so
-    # the inner GLM maximises the wrong objective: `ell_p` is then evaluated with the right
-    # likelihood at the wrong parameters, understating it and shipping a too-narrow interval.
+    # Dispatch on the asymptote *values*, not on their `fixed` flags. The offset trick models
+    # the raw failure rate, `P(failure) = F(z)`, which is an identity only at `u = 1, l = 0`.
+    # For any other fixed pair the modelled quantity is `(u - P) / (u - l)`, so the inner GLM
+    # maximises the wrong objective: `ell_p` is then evaluated with the right likelihood at the
+    # wrong parameters, understating it and shipping a too-narrow interval.
     # This mirrors `models.py`'s own GLM special case, which already tests the values.
     if (
         fit.params["upper"].fixed
@@ -725,7 +723,7 @@ def profile_interval(
 def delta_interval(
     fit: Fit, *, definition: Definition, target: float, level: float, theta_hat: float, value: float
 ) -> IntervalResult:
-    """The delta-method interval for a solved threshold (plan section 5.4, cross-check).
+    """The delta-method interval for a solved threshold (the cross-check).
 
     Computed on the log scale and exponentiated -- even on a linear axis, where
     ``sigma_log = sigma_theta / value`` -- which is what keeps the interval positive and

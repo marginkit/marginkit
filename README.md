@@ -240,7 +240,7 @@ fake rather than an estimate.
 robustmargin's break-point and censoring conventions come from
 [zeta-bench](https://github.com/badkoubeh/zeta-bench) (`robustness/cards.py::break_point`). Its
 dose-response estimation is new. See
-[`docs/PROVENANCE.md`](https://github.com/robustmargin/robustmargin/blob/main/docs/PROVENANCE.md)
+[PROVENANCE.md](https://github.com/robustmargin/robustmargin/blob/main/docs/PROVENANCE.md)
 for what was carried over and what deliberately differs.
 
 ## Development
@@ -253,7 +253,8 @@ pytest            # enforces 90% branch coverage
 ```
 
 CI runs the tests on Python 3.11, 3.12, and 3.13 against current dependencies. It also runs them
-on Python 3.11 against the oldest supported versions, pinned in `ci/constraints-min.txt`.
+on Python 3.11 against the oldest supported versions, pinned in
+[`ci/constraints-min.txt`](https://github.com/robustmargin/robustmargin/blob/main/ci/constraints-min.txt).
 Changes are recorded in [`CHANGELOG.md`](https://github.com/robustmargin/robustmargin/blob/main/CHANGELOG.md).
 
 ## License

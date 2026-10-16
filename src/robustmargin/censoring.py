@@ -1,34 +1,34 @@
-"""Censoring classification (plan section 5.5) and exact one-sided bounds (`decisions/0009`).
+"""Censoring classification and exact one-sided bounds.
 
 Public: :func:`exact_one_sided_bound`, the one piece of numeric machinery every rule in this
 module (and :func:`robustmargin.empirical.per_cell_clopper_pearson`) is built from -- the exact
 arithmetic lives in exactly one place, here. Internal: :func:`classify`, which turns a
 :class:`~robustmargin.Fit` plus an already-resolved target performance into a
-:class:`Classification` describing which of plan section 5.5's outcomes applies.
+:class:`Classification` describing which of the censoring outcomes applies.
 
-Classification order (plan section 5.5's table is a list of conditions, not a sequence; this is
-the sequence, per `decisions/0008`, `0009`, `0011`, `0012`):
+Classification order (the censoring conditions are a list of conditions, not a sequence; this is
+the sequence):
 
 1. ``fit.status is CONTROL_INCOMPATIBLE`` -- terminal mirror.
 2. ``FAILS_AT_BASELINE`` -- the zero-severity control's exact one-sided bound at ``level``
-   already fails the target, and no other tested level passes it (`decisions/0008`, `0011`: a
-   control failure contradicted by a later passing level is a monotonicity contradiction, not a
-   clean baseline failure, and belongs to step 7 instead). Short-circuits before ``UNREACHABLE``.
+   already fails the target, and no other tested level passes it (a control failure
+   contradicted by a later passing level is a monotonicity contradiction, not a clean baseline
+   failure, and belongs to step 7 instead). Short-circuits before ``UNREACHABLE``.
 3. ``UNREACHABLE`` -- the target is not strictly inside ``(l, u)``. Only checked when
-   ``fit.status is OK``, since reachability needs a fitted ``l``/``u`` (`decisions/0008`).
+   ``fit.status is OK``, since reachability needs a fitted ``l``/``u``.
 4. ``RIGHT`` -- the highest tested level's one-sided *lower* bound at ``level`` still clears the
    target.
 5. ``LEFT`` -- the lowest *nonzero* tested level's one-sided *upper* bound at ``level`` fails the
-   target, and the control's one-sided lower bound clears it (`decisions/0012`: evaluated on the
-   data, so this and ``RIGHT`` are reachable on a converged fit too).
+   target, and the control's one-sided lower bound clears it (evaluated on the data, so this
+   and ``RIGHT`` are reachable on a converged fit too).
 6. ``fit.status is OK`` and neither ``RIGHT`` nor ``LEFT`` fired -- solve (the caller runs the
    requested interval method); ``Classification.solve`` is ``True``.
 7. Otherwise (``SEPARATION``/``NOT_CONVERGED``) -- the exact-bound fallback: attach the grid
    value, then build a two-sided bracket from every tested cell (control included), each side at
-   ``(1 + level) / 2`` (`decisions/0009`, so joint coverage is at least ``level``). A bracket
-   whose largest confidently-passing severity is not below its smallest confidently-failing one
-   contradicts monotonicity; report no bounds at all with both levels named in a warning
-   (`decisions/0011`), keeping the fit's own status.
+   ``(1 + level) / 2`` (so joint coverage is at least ``level``). A bracket whose largest
+   confidently-passing severity is not below its smallest confidently-failing one contradicts
+   monotonicity; report no bounds at all with both levels named in a warning, keeping the fit's
+   own status.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ __all__ = ["Classification", "classify", "exact_one_sided_bound"]
 _VALID_SIDES = frozenset({"lower", "upper"})
 
 # The two statuses that mean "the fit failed but the data still supports an exact
-# statement" -- plan section 5.2's fallback, and the only two `Threshold` allows `grid` on.
+# statement" -- the exact-bound fallback, and the only two `Threshold` allows `grid` on.
 _NONCONVERGENT_STATUSES = frozenset({Status.SEPARATION, Status.NOT_CONVERGED})
 
 
@@ -55,7 +55,7 @@ def exact_one_sided_bound(
     successes: int, trials: int, *, level: float, side: Literal["lower", "upper"]
 ) -> float:
     """The exact (Clopper-Pearson) one-sided confidence bound on a binomial proportion at
-    confidence ``level`` (`decisions/0009`).
+    confidence ``level``.
 
     ``scipy.stats.binomtest(successes, trials).proportion_ci`` is two-sided: at
     ``confidence_level = c`` it puts ``(1 - c) / 2`` in each tail, so each endpoint is itself a
@@ -157,9 +157,9 @@ def _control_cell(cells: tuple[Cell, ...]) -> Cell | None:
 def _baseline_rate(control: Cell, *, level: float) -> BaselineRate:
     """The control cell's rate with its exact interval, for a `FAILS_AT_BASELINE` result.
 
-    This is a **two-sided** Clopper-Pearson interval at `level`, which is what plan section 5.4
-    specifies for a reported per-cell rate: "Use `binomtest(k, n).proportion_ci(
-    confidence_level=..., method='exact')`. Label these `per_cell_clopper_pearson`."
+    This is a **two-sided** Clopper-Pearson interval at `level`, which is how a reported
+    per-cell rate is defined: `binomtest(k, n).proportion_ci(confidence_level=...,
+    method='exact')`, labelled `per_cell_clopper_pearson`.
 
     It is deliberately *not* the one-sided bound that decided the `FAILS_AT_BASELINE`
     classification. Those are two different jobs: the classification asks "does this cell
@@ -195,7 +195,7 @@ def _fails_at_baseline(
     )
     if not control_upper < target:
         return None
-    # decisions/0011: a control that fails is only a *clean* baseline failure if nothing else
+    # A control that fails is only a *clean* baseline failure if nothing else
     # tested ever confidently passes the same target -- otherwise this is a monotonicity
     # contradiction (a later level passing while the control fails), which step 7 reports
     # instead, naming both levels.
@@ -320,17 +320,16 @@ def _contradiction_warning(
         else "no bounds are reported"
     )
     return (
-        # `decisions/0011`'s second amendment: the leading `NON_MONOTONE: ` token is the
-        # supported way to detect this condition -- distinct from `Fit.monotonicity`'s own
-        # structured, data-only adjacent-level check (`decisions/0023` "Amendment 1"), which
-        # compares raw counts against each other rather than exact bounds against the *fitted*
-        # curve; the two can disagree, and both are reported when they fire (see
+        # The leading `NON_MONOTONE: ` token is the supported way to detect this condition --
+        # distinct from `Fit.monotonicity`'s own structured, data-only adjacent-level check,
+        # which compares raw counts against each other rather than exact bounds against the
+        # *fitted* curve; the two can disagree, and both are reported when they fire (see
         # `threshold.py`'s `"NON_MONOTONE_DATA: "` token). On a converged fit this warning is the
         # *only* signal of *this* kind of contradiction -- `grid` is legal only for
-        # SEPARATION/NOT_CONVERGED (`decisions/0010`), so a consumer filtering on `status is OK
-        # and censoring is NONE` would otherwise see a clean bounded interval from data the exact
-        # tests just proved inconsistent with any monotone curve. Changing or removing this token
-        # is a behaviourally breaking change.
+        # SEPARATION/NOT_CONVERGED, so a consumer filtering on `status is OK and censoring is
+        # NONE` would otherwise see a clean bounded interval from data the exact tests just
+        # proved inconsistent with any monotone curve. Changing or removing this token is a
+        # behaviourally breaking change.
         "NON_MONOTONE: censoring.classify: exact one-sided tests at confidence "
         f"{level} contradict monotonicity: severity {lo_severity} confidently "
         f"passes (lower bound {lo_bound!r} >= target {target!r}) while the lower severity "
@@ -367,17 +366,18 @@ def _scan_bounds(
 def _contradiction_or_none(
     fit: Fit, cells: tuple[Cell, ...], *, target: float, level: float
 ) -> Classification | None:
-    """`decisions/0011`, applied *before* the `RIGHT`/`LEFT` branches rather than only inside
-    the bracket.
+    """The exact-bounds-contradict-monotonicity check, applied *before* the `RIGHT`/`LEFT`
+    branches rather than only inside the bracket.
 
     Both short-circuits return a directional claim about where the threshold lies -- "sigma* >
     x_max", "sigma* < x_min" -- and every such claim rests on the monotonicity assumption stated
     in `Threshold`'s docstring. When the exact tests themselves contradict that assumption, the
     premise of the claim has failed, so the claim is not a weaker true statement: it is a
-    statement whose premise is false. Reporting it with no diagnostic is what `0011` forecloses.
+    statement whose premise is false. Reporting it with no diagnostic is what this check exists
+    to prevent.
 
     The confidence is `level`, not the bracket's `(1 + level) / 2`, because these are the
-    one-sided bounds the `RIGHT`/`LEFT` rules are themselves evaluated at (`decisions/0009`).
+    one-sided bounds the `RIGHT`/`LEFT` rules are themselves evaluated at.
     """
     lo_severity, lo_bound, hi_severity, hi_bound = _scan_bounds(cells, target=target, level=level)
     if lo_severity is None or hi_severity is None or lo_severity < hi_severity:
@@ -393,13 +393,13 @@ def _contradiction_or_none(
     )
     if fit.status is Status.OK:
         # A converged fit still has a model-based estimate, and `Threshold` requires `value`
-        # whenever status is OK and censoring is NONE -- `decisions/0011`'s all-`None` encoding
-        # is only constructible on a failed fit, which is the case it was written for. So the
+        # whenever status is OK and censoring is NONE -- the all-`None` encoding of a
+        # contradiction (no value, no bounds) is only constructible on a failed fit. So the
         # contradiction suppresses the `RIGHT`/`LEFT` branches (whose directional claim rests on
         # the monotonicity the data just contradicted) and falls through to the solve path,
         # carrying the warning. The caller gets the model's answer plus an explicit statement
-        # that the exact tests disagree with the model's monotonicity assumption, which is what
-        # plan section 5.7 means by a diagnostic that is reported and never acted on.
+        # that the exact tests disagree with the model's monotonicity assumption: a diagnostic
+        # that is reported and never acted on.
         return Classification(
             status=Status.OK,
             censoring=Censoring.NONE,
@@ -432,7 +432,7 @@ def _exact_bound_fallback(
     # requires `>= 0` on a linear axis and `> 0` on a log one -- so it is not a bound at all. On
     # a log axis it is also illegal: `lo = 0.0` is rejected outright. The upper side keeps the
     # control, because a control that *fails* is genuinely informative (and is what the
-    # monotonicity contradiction of `decisions/0011` is usually built from).
+    # monotonicity contradiction is usually built from).
     lo_severity: float | None = None
     lo_bound = 0.0
     for cell in cells:
@@ -487,9 +487,9 @@ def _exact_bound_fallback(
             "are reported",
         )
     elif lo_severity is None or hi_severity is None:
-        # Only one side is determined, so this is not a bracket and `decisions/0009`'s
-        # `(1 + level) / 2` split does not apply: a single one-sided statement belongs at
-        # `level`, like every other one-sided bound in the package.
+        # Only one side is determined, so this is not a bracket and the `(1 + level) / 2` split
+        # does not apply: a single one-sided statement belongs at `level`, like every other
+        # one-sided bound in the package.
         #
         # Which side that is must be decided from the *bracket-level* scan above, before the
         # rescan, and the other side must be forced back to `None`. The looser `level` can
@@ -498,8 +498,7 @@ def _exact_bound_fallback(
         # the bracket level and failing at `level`. Taking both sides from the rescan therefore
         # manufactures a two-sided bracket with each side at `level`, whose joint coverage is
         # about `2 * level - 1` while `Threshold.level` still reports `level`. That is exactly
-        # the mislabelling this branch exists to prevent, and an earlier version of it did
-        # precisely that (`REVIEWS.md` R8 #18).
+        # the mislabelling this branch exists to prevent.
         determined = "lower" if hi_severity is None else "upper"
         rescanned_lo, _, rescanned_hi, _ = _scan_bounds(cells, target=target, level=level)
         if determined == "lower":
@@ -528,7 +527,7 @@ def _exact_bound_fallback(
 def _with_grid(
     classification: Classification, fit: Fit, cells: tuple[Cell, ...], *, target: float
 ) -> Classification:
-    """Attach the grid break-point when, and only when, the fit failed (`decisions/0010`).
+    """Attach the grid break-point when, and only when, the fit failed.
 
     ``Threshold`` permits ``grid`` only for ``SEPARATION`` and ``NOT_CONVERGED``, so a
     converged fit's one-sided bound is returned unchanged.
@@ -539,8 +538,7 @@ def _with_grid(
 
 
 def classify(fit: Fit, *, target: float, level: float) -> Classification:
-    """Classify a fit against a resolved target performance, per plan section 5.5 (order per the
-    module docstring).
+    """Classify a fit against a resolved target performance (order per the module docstring).
 
     Parameters
     ----------
@@ -548,9 +546,9 @@ def classify(fit: Fit, *, target: float, level: float) -> Classification:
         The :class:`~robustmargin.Fit` to classify. Its ``cells`` (sorted ascending by
         :meth:`~robustmargin.Observations.cells`) are what every exact test here is run against.
     target
-        The already-resolved target performance ``P*`` (plan section 5.3). Resolving it from a
-        :class:`~robustmargin.Definition` -- including which ``u`` a failed-fit fallback uses
-        (`decisions/0008`) -- is the caller's job.
+        The already-resolved target performance ``P*``. Resolving it from a
+        :class:`~robustmargin.Definition` -- including which ``u`` a failed-fit fallback uses --
+        is the caller's job.
     level
         The confidence level, strictly between 0 and 1.
 
@@ -578,14 +576,14 @@ def classify(fit: Fit, *, target: float, level: float) -> Classification:
     if unreachable is not None:
         return unreachable
 
-    # `RIGHT`/`LEFT` are reached on a converged fit as well as a failed one (`decisions/0012`),
-    # so the grid statistic is attached here rather than inside `_right`/`_left`: plan section
-    # 5.5 pairs the grid rule with the exact bounds for separation and non-convergence, and a
+    # `RIGHT`/`LEFT` are reached on a converged fit as well as a failed one (they are evaluated
+    # on the data), so the grid statistic is attached here rather than inside `_right`/`_left`:
+    # the grid rule accompanies the exact bounds for separation and non-convergence, and a
     # one-sided bound on a failed fit is that same fallback. On an `OK` fit `Threshold` forbids
     # `grid`, so the rule is stated once, in one place, and cannot leak into the `OK` branch.
-    # `decisions/0011` before the directional branches: a `RIGHT`/`LEFT` bound asserts where
-    # the threshold lies, and that assertion rests on monotonicity. If the exact tests
-    # contradict monotonicity, no such bound may be reported (C2, Phase 5 stats review).
+    # The monotonicity-contradiction check runs before the directional branches: a
+    # `RIGHT`/`LEFT` bound asserts where the threshold lies, and that assertion rests on
+    # monotonicity. If the exact tests contradict monotonicity, no such bound may be reported.
     contradiction = _contradiction_or_none(fit, cells, target=target, level=level)
     if contradiction is not None:
         return contradiction

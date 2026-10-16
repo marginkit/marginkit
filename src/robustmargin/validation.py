@@ -1,23 +1,18 @@
-"""Fit diagnostics (model-only) and the data-only adjacent-level monotonicity check (plan
-section 5.7; ``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``, as amended by that
-decision's "Amendment 1" (monotonicity moves onto ``Fit`` directly), "Amendment 2" (the
-structural goodness-of-fit exclusion and the ``SPARSE_CELLS: `` warning), "Amendment 3" (that
-warning fires only on an observed event, not a bare small expectation) and "Amendment 4" (the
-warning's expected-count cutoff, tightened to below ``0.1``)).
+"""Fit diagnostics (model-only) and the data-only adjacent-level monotonicity check.
 
-Two independent things live here, deliberately kept apart (Amendment 1's own rationale):
+Two independent things live here, deliberately kept apart:
 
 - :class:`Diagnostics` / :func:`diagnose` need a converged fit -- goodness of fit, dispersion,
   and link comparison are all statements about how well a fitted curve matches the data, so they
   are ``None`` whenever :attr:`~robustmargin.Fit.status` is not :data:`~robustmargin.Status.OK`
-  (hard constraint 3, read as "no model-derived numbers on a failed fit").
+  (a failed fit carries no model-derived numbers).
 - :class:`MonotonicityCheck` / :func:`check_monotonicity` need only raw per-level counts -- an
   exact one-sided Fisher test on adjacent severity levels, Holm-corrected across the family. It
   therefore runs on *every* :func:`~robustmargin.fit_dose_response` return path, whatever the
   ``Status``, because non-monotone data is a common cause of a failed fit and disappearing the
   check exactly then would hide the finding it exists to surface.
 
-Both are reported and never acted on automatically (plan section 5.7): nothing here changes a
+Both are reported and never acted on automatically: nothing here changes a
 reported number, chooses a link, or corrects for dispersion. ``Fit.link`` stays whatever the
 caller passed.
 """
@@ -53,24 +48,22 @@ __all__ = [
     "diagnose",
 ]
 
-# plan section 5.7: "a warning when phi > 1.5" -- strict, an exact 1.5 does not warn.
+# A warning when phi > 1.5 -- strict, an exact 1.5 does not warn.
 _DISPERSION_WARNING_THRESHOLD = 1.5
 _OVERDISPERSED_WARNING_PREFIX = "OVERDISPERSED: "
 _SPARSE_CELLS_WARNING_PREFIX = "SPARSE_CELLS: "
-# decisions/0023 Amendment 4 (tightening Amendment 3, itself correcting Amendment 2 item 3): a
-# counted cell is flagged on one side (successes or failures) only when *both* hold -- the
+# A counted cell is flagged on one side (successes or failures) only when *both* hold -- the
 # expected count on that side is below this cutoff, and the *observed* count on that side is at
-# least 1. A small expected count with nothing observed there is a clean plateau, not a finding
-# (Amendment 3); an observed event against a merely-moderate expectation (down to about 0.43 near
-# a design's transition) is ordinary too (Amendment 4) -- only a genuine event against an
-# expectation this small is the "dominated by a single event" pathology (Amendment 2's own "W1"
-# finding) the warning exists for. Report-only: nothing here is recomputed. A fixed constant, not
-# a parameter -- changing it needs a new amendment (Amendment 4's own "Consequences").
+# least 1. A small expected count with nothing observed there is a clean plateau, not a finding;
+# an observed event against a merely-moderate expectation (down to about 0.43 near a design's
+# transition) is ordinary too -- only a genuine event against an expectation this small is the
+# "dominated by a single event" pathology the warning exists for. Report-only: nothing here is
+# recomputed. A fixed constant, not a parameter; changing it is a statistical-method change.
 _SPARSE_EXPECTED_CUTOFF = 0.1
-# decisions/0023 Amendment 2, item 2: R's own `binomial()$linkinv` clamp (`.Machine$double.eps`).
+# R's own `binomial()$linkinv` clamp (`.Machine$double.eps`).
 _PROBABILITY_EPS = float(np.finfo(float).eps)
 
-# decisions/0023 item 3: link comparison covers exactly these three v1 binomial links.
+# Link comparison covers exactly these three binomial links.
 _COMPARISON_LINKS: tuple[str, ...] = ("probit", "logit", "cloglog")
 
 _MONOTONICITY_METHOD = "fisher_exact_one_sided_holm"
@@ -80,16 +73,15 @@ _VALID_DEPENDENCE_INPUTS = frozenset({"independent"})
 
 @dataclass(frozen=True, kw_only=True)
 class Diagnostics:
-    """Model-only fit diagnostics: goodness of fit, dispersion, and link comparison
-    (plan section 5.7, ``decisions/0023`` as amended by that decision's "Amendment 1", which
-    moved the monotonicity check off this type entirely -- see :class:`MonotonicityCheck`).
+    """Model-only fit diagnostics: goodness of fit, dispersion, and link comparison. The
+    monotonicity check is not part of this type -- see :class:`MonotonicityCheck`.
 
     Built only from a converged fit (:func:`diagnose` requires ``fit.status is Status.OK``), and
     attached to :attr:`~robustmargin.Fit.diagnostics` only in that case: ``None`` whenever the fit
-    failed (hard constraint 3, read as "no model-derived numbers on a failed fit"). Contrast
-    :class:`MonotonicityCheck`, attached to :attr:`~robustmargin.Fit.monotonicity` on *every*
-    ``fit_dose_response`` return path regardless of ``Status`` -- the two appended fields on
-    ``Fit`` have different nullability for exactly this reason.
+    failed (a failed fit carries no model-derived numbers). Contrast :class:`MonotonicityCheck`,
+    attached to :attr:`~robustmargin.Fit.monotonicity` on *every* ``fit_dose_response`` return path
+    regardless of ``Status`` -- the two fields on ``Fit`` have different nullability for exactly
+    this reason.
 
     Attributes
     ----------
@@ -99,13 +91,12 @@ class Diagnostics:
         cell is excluded from this sum only when it is *structurally* deterministic under the
         model -- a log-axis cell at severity exactly ``0.0`` when ``upper`` is *fixed* at exactly
         ``1.0`` (``direction="decreasing"``); that cell has zero variance and zero deviance by
-        construction (`decisions/0023` Amendment 2, item 1). Every other cell counts, including
-        one whose fitted probability happens to round to exactly ``0`` or ``1`` in double
-        precision: probabilities are computed to avoid needless cancellation and clamped to
-        ``[eps, 1 - eps]`` (``eps`` the machine epsilon, matching R's own
-        ``binomial()$linkinv``), so such a cell contributes approximately zero rather than a
-        ``0/0``. An earlier implementation excluded by *computed* value instead of by structure,
-        which made ``df`` depend on the link (Amendment 2's own "C1" finding) -- corrected here.
+        construction. Every other cell counts, including one whose fitted probability happens to
+        round to exactly ``0`` or ``1`` in double precision: probabilities are computed to avoid
+        needless cancellation and clamped to ``[eps, 1 - eps]`` (``eps`` the machine epsilon,
+        matching R's own ``binomial()$linkinv``), so such a cell contributes approximately zero
+        rather than a ``0/0``. The exclusion is by structure, not by *computed* value, so ``df``
+        does not depend on the link.
     pearson_chi2
         The Pearson chi-square statistic on the same cells, with the same exclusion and the
         same ``None``-on-``df <= 0`` rule as ``deviance``.
@@ -114,20 +105,21 @@ class Diagnostics:
         (after the structural exclusion above) minus the number of estimated parameters. Always
         an integer, even when it is zero or negative.
     dispersion
-        ``pearson_chi2 / df`` (plan section 5.7's ``phi``), or ``None`` exactly when
-        ``pearson_chi2`` is ``None`` (``df <= 0``). A value strictly greater than ``1.5`` adds a
-        warning starting with ``"OVERDISPERSED: "``; nothing is rescaled and no interval
-        changes as a result (plan section 5.7: reported, never acted on). ``phi`` can be
-        dominated by a single observed event against a tiny expected count (`decisions/0023`
-        Amendment 2's own "W1" finding) -- see ``warnings``' ``"SPARSE_CELLS: "`` entry, which
-        flags exactly that case without changing ``dispersion`` itself.
+        ``pearson_chi2 / df`` (``phi``), or ``None`` exactly when ``pearson_chi2`` is ``None``
+        (``df <= 0``). A value strictly greater than ``1.5`` adds a warning starting with
+        ``"OVERDISPERSED: "``; nothing is rescaled and no interval changes as a result (reported,
+        never acted on). It is a screen, not a test: under a correctly specified model
+        ``phi > 1.5`` fires about 21% of the time at ``df`` 1 to 3 and about 15% at ``df`` 8.
+        ``phi`` can be dominated by a single observed event against a tiny expected
+        count -- see ``warnings``' ``"SPARSE_CELLS: "`` entry, which flags exactly that case without
+        changing ``dispersion`` itself.
     link_aic
         AIC for each of ``"probit"``, ``"logit"`` and ``"cloglog"``, refit under the same
         ``upper``/``lower`` specification as the diagnosed fit. The diagnosed fit's own link
         reuses its own ``log_likelihood`` and parameter count directly (never refit, so it is
         exact by construction); the other two links are refit through the existing statsmodels
-        fitting paths (hard constraint 2). ``None`` for a link whose refit does not reach
-        :data:`~robustmargin.Status.OK` -- see ``link_status``.
+        fitting paths (never a hand-rolled fitter). ``None`` for a link whose refit does not
+        reach :data:`~robustmargin.Status.OK` -- see ``link_status``.
     link_status
         The :class:`~robustmargin.Status` of each link's own fit (the diagnosed fit's own status,
         which is always ``OK``, for its own link; the refit's status for the other two).
@@ -136,9 +128,9 @@ class Diagnostics:
         Free-text notes: the ``df <= 0`` reason, an ``"OVERDISPERSED: "`` token, or a
         ``"SPARSE_CELLS: "`` token naming a counted cell flagged on one side (successes or
         failures) because that side's expected count is below ``0.1`` *and* at least one event
-        was actually observed there (`decisions/0023` Amendments 2-4) -- report-only, like
-        ``"OVERDISPERSED: "``: it changes no number, only says that ``pearson_chi2`` and
-        ``dispersion`` are unreliable at that cell. Empty by default.
+        was actually observed there -- report-only, like ``"OVERDISPERSED: "``: it changes no
+        number, only says that ``pearson_chi2`` and ``dispersion`` are unreliable at that cell.
+        Empty by default.
     """
 
     deviance: float | None
@@ -218,8 +210,7 @@ class Diagnostics:
 @dataclass(frozen=True, kw_only=True)
 class AdjacentPair:
     """One adjacent-severity-level pair from a :class:`MonotonicityCheck`: the raw counts at
-    both levels, the one-sided Fisher exact test between them, and its Holm-adjusted p-value
-    (``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``'s "Amendment 1", item 4).
+    both levels, the one-sided Fisher exact test between them, and its Holm-adjusted p-value.
 
     Attributes
     ----------
@@ -294,10 +285,9 @@ class AdjacentPair:
 
 @dataclass(frozen=True, kw_only=True)
 class MonotonicityCheck:
-    """A data-only adjacent-level monotonicity check (``decisions/0023``'s "Amendment 1"): for
-    each pair of adjacent severity levels in the data, a one-sided Fisher exact test for "the
-    higher severity performs better" under ``direction``, Holm-corrected across the whole
-    family.
+    """A data-only adjacent-level monotonicity check: for each pair of adjacent severity levels
+    in the data, a one-sided Fisher exact test for "the higher severity performs better" under
+    ``direction``, Holm-corrected across the whole family.
 
     Needs only raw counts, never a fitted curve, so it is attached to
     :attr:`~robustmargin.Fit.monotonicity` on *every* :func:`~robustmargin.fit_dose_response` return
@@ -384,15 +374,15 @@ class MonotonicityCheck:
 def check_monotonicity(
     obs: Observations, *, dependence: str | None = None, alpha: float = 0.05
 ) -> MonotonicityCheck:
-    """Test every pair of adjacent severity levels in ``obs`` for a reversal (``decisions/0023``'s
-    "Amendment 1"): a one-sided Fisher exact test for "the higher severity performs better" under
-    ``obs.direction``, Holm-corrected across the whole family.
+    """Test every pair of adjacent severity levels in ``obs`` for a reversal: a one-sided Fisher
+    exact test for "the higher severity performs better" under ``obs.direction``,
+    Holm-corrected across the whole family.
 
     Levels are built from ``obs.cells()`` -- successes/trials pooled per exact severity, sorted
-    ascending, exactly like every other cell-based computation in this package (R1: aggregated
+    ascending, exactly like every other cell-based computation in this package (aggregated
     and per-observation input give identical results). The zero-severity control is a level like
     any other, and the control-to-first-level pair is always in the family, whether or not the
-    likelihood a fit built from the same data used the control row (plan section 5.1 drops an
+    likelihood a fit built from the same data used the control row (a fit drops an
     all-success control under a fixed ``upper=1.0``; this function never reads a fit at all).
 
     Parameters
@@ -401,7 +391,7 @@ def check_monotonicity(
         The severity/outcome data to test.
     dependence
         ``None`` (the default) resolves to ``"independent"`` unless ``obs.cluster`` is set, in
-        which case omitting it raises (R2: a method assuming independence must refuse clustered
+        which case omitting it raises (a method assuming independence must refuse clustered
         input unless the caller explicitly opts in). ``"independent"`` may always be passed
         explicitly; the resulting ``MonotonicityCheck.dependence`` is always ``"independent"`` in
         this release.
@@ -432,7 +422,7 @@ def check_monotonicity(
         raise ValueError(
             "check_monotonicity: obs carries cluster ids (obs.cluster is set); a method that "
             "assumes independence must not run on clustered data unless the caller passes "
-            "dependence='independent' explicitly (R2)"
+            "dependence='independent' explicitly"
         )
     _check_finite_number(alpha, label="check_monotonicity alpha")
     if not (0.0 < alpha < 1.0):
@@ -497,7 +487,7 @@ def check_monotonicity(
 
 def _success_and_failure_probabilities(fit: Fit) -> tuple[np.ndarray, np.ndarray]:
     """``(p, 1 - p)`` per cell of ``fit.cells``, from the one shared curve formula in
-    ``robustmargin.models`` (S1, Phase 7 stats review) -- never a second copy of it here. Imported
+    ``robustmargin.models`` -- never a second copy of it here. Imported
     inside this function, not at module scope, since ``robustmargin.models`` imports this module at
     *its* top level (see this module's own docstring on the import cycle); by the time any
     ``Fit`` exists to diagnose, ``robustmargin.models`` has already finished importing.
@@ -518,8 +508,8 @@ def _success_and_failure_probabilities(fit: Fit) -> tuple[np.ndarray, np.ndarray
 def _refit_link(fit: Fit, link: str) -> Fit:
     """Refit ``fit``'s data under ``link``, holding the same ``upper``/``lower`` specification
     (both fixed/estimate flags and, when fixed, the same value). Goes through the existing
-    private statsmodels fitting paths in ``robustmargin.models`` (hard constraint 2: no new
-    optimizer or IRLS) -- imported here, inside the function, rather than at module scope, since
+    private statsmodels fitting paths in ``robustmargin.models`` (no new optimizer or IRLS) --
+    imported here, inside the function, rather than at module scope, since
     by the time any ``Fit`` exists to diagnose, ``robustmargin.models`` has already finished
     importing this module (see this module's own docstring).
 
@@ -570,7 +560,7 @@ def _refit_link(fit: Fit, link: str) -> Fit:
 def _link_comparison(fit: Fit) -> tuple[dict[str, float | None], dict[str, Status]]:
     """AIC and status for each of ``_COMPARISON_LINKS``: the diagnosed fit's own link reuses its
     own ``log_likelihood``/parameter count directly (exact, no refit); the other two are refit
-    via :func:`_refit_link` (``decisions/0023``: "does two extra fits ... on each call").
+    via :func:`_refit_link` (so each call does two extra fits).
     """
     assert fit.params is not None and fit.log_likelihood is not None  # fit.status is OK
 
@@ -594,19 +584,17 @@ def _link_comparison(fit: Fit) -> tuple[dict[str, float | None], dict[str, Statu
 
 
 def _is_structural_zero_control(fit: Fit, cell: Cell) -> bool:
-    """``decisions/0023`` Amendment 2, item 1: a cell is excluded from goodness of fit **only**
-    when it is deterministic *by construction* under the model, never merely because its
-    *computed* fitted probability happens to round to a boundary (Amendment 2's own "C1" finding:
-    the earlier, value-based rule made ``df`` depend on the link).
+    """A cell is excluded from goodness of fit **only** when it is deterministic *by
+    construction* under the model, never merely because its *computed* fitted probability
+    happens to round to a boundary (a value-based rule would make ``df`` depend on the link).
 
     The only case that is structurally deterministic in this release: a log-axis cell at severity
     exactly ``0.0``, under ``direction="decreasing"`` (the only direction ``Fit`` accepts for
-    ``model="binomial"``), when ``upper`` is *fixed* at exactly ``1.0`` -- R3's own
-    ``P(0) = upper`` rule then pins that cell's fitted probability to exactly ``1.0`` with zero
-    variance, for every possible ``mu``/``s``. An *estimated* ``upper`` is never exempt, even when
-    its fitted value happens to equal ``1.0``: the control still identifies ``u`` in that case, so
-    it is not deterministic *by construction* and is counted
-    (``TestControlCountedWhenUpperIsEstimated``).
+    ``model="binomial"``), when ``upper`` is *fixed* at exactly ``1.0`` -- the ``P(0) = upper``
+    rule for a zero-severity control then pins that cell's fitted probability to exactly ``1.0``
+    with zero variance, for every possible ``mu``/``s``. An *estimated* ``upper`` is never
+    exempt, even when its fitted value happens to equal ``1.0``: the control still identifies
+    ``u`` in that case, so it is not deterministic *by construction* and is counted.
     """
     if cell.severity != 0.0 or fit.axis.scale != "log" or fit.direction != "decreasing":
         return False
@@ -617,14 +605,13 @@ def _is_structural_zero_control(fit: Fit, cell: Cell) -> bool:
 
 def diagnose(fit: Fit) -> Diagnostics:
     """Model-only diagnostics for a converged fit: goodness of fit, dispersion, and link
-    comparison (plan section 5.7, ``decisions/0023`` as amended). Never changes ``fit`` itself
-    (plan section 5.7: reported, never acted on) -- in particular, ``fit.link`` is never
-    consulted to pick a "better" link.
+    comparison. Never changes ``fit`` itself (reported, never acted on) -- in particular,
+    ``fit.link`` is never consulted to pick a "better" link.
 
     Parameters
     ----------
     fit
-        The fit to diagnose. Must have ``status is Status.OK`` (hard constraint 3: a failed fit
+        The fit to diagnose. Must have ``status is Status.OK`` (a failed fit
         carries no model-derived numbers -- :func:`~robustmargin.fit_dose_response` itself only
         calls this for an ``OK`` fit and leaves :attr:`~robustmargin.Fit.diagnostics` ``None``
         otherwise).
@@ -641,15 +628,15 @@ def diagnose(fit: Fit) -> Diagnostics:
     if fit.status is not Status.OK:
         raise ValueError(
             f"diagnose: fit.status must be Status.OK (a failed fit carries no model-derived "
-            f"diagnostics -- hard constraint 3), got {fit.status!r}"
+            f"diagnostics), got {fit.status!r}"
         )
     assert fit.params is not None and fit.log_likelihood is not None
 
     k = sum(1 for p in fit.params.values() if not p.fixed)
     p_raw, q_raw = _success_and_failure_probabilities(fit)
-    # decisions/0023 Amendment 2, item 2: R's own binomial()$linkinv clamp, applied to each of
-    # p and (1 - p) independently -- never derived one from the other's clamped value, which
-    # would reintroduce the cancellation _curve_success_and_failure_probability exists to avoid.
+    # R's own binomial()$linkinv clamp, applied to each of p and (1 - p) independently -- never
+    # derived one from the other's clamped value, which would reintroduce the cancellation
+    # _curve_success_and_failure_probability exists to avoid.
     p_clamped = np.clip(p_raw, _PROBABILITY_EPS, 1.0 - _PROBABILITY_EPS)
     q_clamped = np.clip(q_raw, _PROBABILITY_EPS, 1.0 - _PROBABILITY_EPS)
 
@@ -659,9 +646,9 @@ def diagnose(fit: Fit) -> Diagnostics:
     sparse_entries: list[tuple[float, float]] = []
     for cell, p, q in zip(fit.cells, p_clamped, q_clamped, strict=True):
         if _is_structural_zero_control(fit, cell):
-            # decisions/0023 Amendment 2, item 1: deterministic under the model (P(0) = upper
-            # exactly, fixed at 1.0) -- zero variance and zero deviance by construction, not
-            # excluded because its *computed* probability happens to round to a boundary.
+            # Deterministic under the model (P(0) = upper exactly, fixed at 1.0) -- zero
+            # variance and zero deviance by construction, not excluded because its *computed*
+            # probability happens to round to a boundary.
             continue
         counted_cells += 1
         y = float(cell.successes)
@@ -675,9 +662,9 @@ def diagnose(fit: Fit) -> Diagnostics:
             + float(xlogy(n - y, (n - y) / expected_failures))
         )
         pearson_sum += (y - expected_successes) ** 2 / (n * p_f * q_f)
-        # decisions/0023 Amendments 3 and 4: a side is flagged only when *both* its expected
-        # count is below the cutoff and something was actually observed there -- a small
-        # expectation with nothing observed on that side is a clean plateau, not a finding.
+        # A side is flagged only when *both* its expected count is below the cutoff and
+        # something was actually observed there -- a small expectation with nothing observed on
+        # that side is a clean plateau, not a finding.
         flagged_side_expecteds: list[float] = []
         if expected_successes < _SPARSE_EXPECTED_CUTOFF and y >= 1.0:
             flagged_side_expecteds.append(expected_successes)
@@ -709,9 +696,9 @@ def diagnose(fit: Fit) -> Diagnostics:
             )
 
     if sparse_entries:
-        # decisions/0023 Amendments 2-4: report-only -- names only the flagged severities (an
-        # observed event against a below-cutoff expectation on that side), and the single
-        # smallest expected count among those *flagged sides only*; changes no number above.
+        # Report-only -- names only the flagged severities (an observed event against a
+        # below-cutoff expectation on that side), and the single smallest expected count among
+        # those *flagged sides only*; changes no number above.
         severities_repr = ", ".join(repr(severity) for severity, _ in sparse_entries)
         minimum_expected = min(count for _, count in sparse_entries)
         warnings.append(

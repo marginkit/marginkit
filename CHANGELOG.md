@@ -69,6 +69,21 @@ no reported number moved.
   Publishing: TestPyPI first, an install check, then PyPI after the owner's approval. A
   pre-release tag stops after the TestPyPI install check. `tools/check_dist.py` holds the artifact
   checks that CI and the release both run.
+- The text in the package is self-contained: docstrings, comments, the schema's descriptions and
+  `pyproject.toml` no longer cite design documents that are not published. Eight exception
+  messages lost such a trailing reference, for example `(section 5.6)`. One `ratio_interval`
+  warning, which cannot fire under `dependence="independent"`, had its wrong reason for the
+  Fieller discriminant being non-negative corrected. Only that prose changed; every exception
+  type, raise condition and warning token is unchanged, and no code changed.
+  `tests/unit/test_shipped_text_is_self_contained.py` keeps it that way.
+- Docstrings now state two known limitations directly:
+  - a near-step curve with an estimated asymptote, or a fixed one other than 1/0, is not
+    detected and can return `OK` with uninformative Wald standard errors;
+  - the `OVERDISPERSED: ` screen fires often on small `df` even under a correct model.
+- `tools/check_dist.py` checks both artifacts against an allowlist of what may ship: the package
+  modules, `py.typed`, the schema, `LICENSE`, `pyproject.toml`, the build metadata, and
+  `README.md`, the only document, which is the PyPI project page. Any other file fails the
+  build, in CI and in the release workflow.
 - Warning and exception messages no longer cite internal design documents (decision records,
   plan sections, decision labels). Only the prose changed: the leading tokens `NON_MONOTONE: `,
   `NON_MONOTONE_DATA: `, `OVERDISPERSED: ` and `SPARSE_CELLS: ` are byte-identical, and every
