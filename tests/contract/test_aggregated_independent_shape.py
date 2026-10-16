@@ -5,7 +5,7 @@ curve as a list of ``(severity, success_rate)`` pairs, unzipped into two lists, 
 the public API with ``criterion=0.95, signed=True``, then read back via ``.value`` and
 ``.max_tested`` (see ``build_card_summary`` / ``_format_break`` in
 ``../zeta-bench/robustness/cards.py``). Only the public API surface is used here — no internal
-marginkit module is imported.
+robustmargin module is imported.
 
 A failing test in this file means a breaking change to the public API that zeta-bench depends
 on (plan section 3.3, ``docs/CONSUMERS.md``). **Do not edit this test to make it pass.** Stop
@@ -17,6 +17,15 @@ freshly-built ``GridBreakPoint``'s serialised ``schema_version`` were updated to
 zeta-bench itself is unaffected (it unpacks ``grid_break_point``'s return to a plain
 ``(value, max_tested)`` tuple and never serialises the dataclass at all), but the two assertions
 here are the contract for anyone who does.
+
+**Edit recorded (decisions/0027):** the package is renamed ``robustmargin`` and
+``schema_version`` is now ``"4"`` on every result type, including ``GridBreakPoint``. The two
+literal ``"3"`` assertions this file made against a freshly-built ``GridBreakPoint``'s serialised
+``schema_version`` were updated to ``"4"``, and the imports moved to ``robustmargin``. This is a
+breaking change signed off in ``decisions/0027`` (Appendix B item 2) -- every import breaks and
+every stored ``"3"`` card is rejected by the ``"4"``-only reader -- not an edit made to turn a
+failing contract test green. zeta-bench is unaffected beyond its import (``from robustmargin
+import grid_break_point``): it never serialises ``GridBreakPoint``, so no card it holds changes.
 """
 
 from __future__ import annotations
@@ -26,7 +35,7 @@ import inspect
 import json
 from inspect import Parameter
 
-from marginkit import Censoring, grid_break_point
+from robustmargin import Censoring, grid_break_point
 
 
 def _load_matrix_counts() -> dict[str, tuple[list[float], list[int], list[int]]]:
@@ -140,11 +149,11 @@ def test_result_round_trips_through_json_with_string_censoring_and_schema_versio
     assert reloaded["censoring"] in ("NONE", "RIGHT")
     assert reloaded["censoring"] == "NONE"
     # decisions/0022 bumped schema_version to "2" on every result type, GridBreakPoint
-    # included: one schema document means one version. decisions/0023 has since bumped it again,
-    # to "3" (Fit.diagnostics), still package-wide. zeta-bench is unaffected -- it unpacks
-    # grid_break_point to a plain (value, max_tested) tuple and never serialises this
-    # dataclass -- but this assertion is the contract for anyone who does.
-    assert reloaded["schema_version"] == "3"
+    # included: one schema document means one version. decisions/0023 bumped it again, to "3"
+    # (Fit.diagnostics), and decisions/0027 to "4" (the rename), still package-wide. zeta-bench is
+    # unaffected -- it unpacks grid_break_point to a plain (value, max_tested) tuple and never
+    # serialises this dataclass -- but this assertion is the contract for anyone who does.
+    assert reloaded["schema_version"] == "4"
 
 
 def test_right_censored_result_round_trips_through_json_too() -> None:
@@ -156,7 +165,7 @@ def test_right_censored_result_round_trips_through_json_too() -> None:
     reloaded = json.loads(dumped)
 
     assert reloaded["censoring"] == "RIGHT"
-    assert reloaded["schema_version"] == "3"  # decisions/0022, decisions/0023, as above
+    assert reloaded["schema_version"] == "4"  # decisions/0022, 0023, 0027, as above
 
 
 def test_criterion_is_keyword_only_and_signed_defaults_to_false() -> None:
@@ -177,7 +186,7 @@ def test_criterion_is_keyword_only_and_signed_defaults_to_false() -> None:
 def test_axis_and_from_counts_construction_on_pid_sensor_noise_counts() -> None:
     """The plan section 4.1 API sketch's own worked example: ``Axis`` plus
     ``Observations.from_counts`` on the PID x sensor_noise counts."""
-    from marginkit import Axis, Cell, Observations
+    from robustmargin import Axis, Cell, Observations
 
     axis = Axis(name="sensor_noise", unit="m", scale="log")
     obs = Observations.from_counts(
@@ -198,7 +207,7 @@ def test_axis_and_from_counts_construction_on_pid_sensor_noise_counts() -> None:
 
 
 def test_definition_absolute_0_95_stores_value() -> None:
-    from marginkit import Definition
+    from robustmargin import Definition
 
     definition = Definition.absolute(0.95)
 
@@ -209,9 +218,9 @@ def test_definition_absolute_0_95_stores_value() -> None:
 def test_scorecard_of_fakes_round_trips_through_json_text() -> None:
     """The consumer-shaped path: build a ``Scorecard``, serialise it to a JSON string, parse it
     back, and reload the result objects -- not just ``to_dict``/``from_dict`` in memory."""
-    from marginkit import Scorecard
-    from marginkit.report import from_dict, to_dict
-    from marginkit.testing import fake_fit, fake_ratio, fake_threshold
+    from robustmargin import Scorecard
+    from robustmargin.report import from_dict, to_dict
+    from robustmargin.testing import fake_fit, fake_ratio, fake_threshold
 
     card = Scorecard(
         results=(
@@ -231,7 +240,7 @@ def test_scorecard_of_fakes_round_trips_through_json_text() -> None:
 
 def test_pid_sensor_noise_absolute_0_95_gives_a_finite_bracketed_interval() -> None:
     """Worked case from plan section 5.5: the identifiable PID x sensor_noise transition."""
-    from marginkit import Axis, Definition, Observations, fit_dose_response, threshold
+    from robustmargin import Axis, Definition, Observations, fit_dose_response, threshold
 
     severity, successes, trials = _load_matrix_counts()["pid_sensor_noise"]
     axis = Axis(name="sensor_noise", unit="m", scale="log")
@@ -256,7 +265,7 @@ def test_pid_sensor_noise_absolute_0_95_gives_a_finite_bracketed_interval() -> N
 
 def test_pid_wind_absolute_0_95_is_right_censored_at_10() -> None:
     """Worked case from plan section 5.5: 500/500 at every tested wind level."""
-    from marginkit import Axis, Definition, Observations, fit_dose_response, threshold
+    from robustmargin import Axis, Definition, Observations, fit_dose_response, threshold
 
     severity, successes, trials = _load_matrix_counts()["pid_wind"]
     axis = Axis(name="wind", unit="m/s", scale="linear")
@@ -278,7 +287,7 @@ def test_pid_wind_absolute_0_95_is_right_censored_at_10() -> None:
 
 def test_sac_sensor_noise_absolute_0_95_fails_at_baseline() -> None:
     """Worked case from plan section 5.5: the SAC control is already at 98/200."""
-    from marginkit import Axis, Definition, Observations, Status, fit_dose_response, threshold
+    from robustmargin import Axis, Definition, Observations, Status, fit_dose_response, threshold
 
     severity, successes, trials = _load_matrix_counts()["sac_sensor_noise"]
     axis = Axis(name="sensor_noise", unit="m", scale="log")
@@ -298,7 +307,7 @@ def test_sac_sensor_noise_absolute_0_95_fails_at_baseline() -> None:
 
 def test_sac_sensor_noise_baseline_fraction_0_5_is_left_censored_at_0_01() -> None:
     """Worked case from plan section 5.5: the lowest nonzero level already fails."""
-    from marginkit import Axis, Definition, Observations, fit_dose_response, threshold
+    from robustmargin import Axis, Definition, Observations, fit_dose_response, threshold
 
     severity, successes, trials = _load_matrix_counts()["sac_sensor_noise"]
     axis = Axis(name="sensor_noise", unit="m", scale="log")
@@ -346,7 +355,7 @@ def test_fieller_ratio_on_pid_sensor_noise_halves_propagates_separation() -> Non
     from disjoint data, and must raise otherwise -- so this must not be two thresholds off one
     fit, which would share every observation.
     """
-    from marginkit import (
+    from robustmargin import (
         Axis,
         Definition,
         Observations,
@@ -401,10 +410,10 @@ def test_fieller_ratio_on_two_constructed_ok_thresholds_reports_an_interval_shap
     """The OK/OK Fieller contract path: since ``pid_sensor_noise`` cannot supply two clean
     ``OK`` fits from disjoint halves (see the test above), this covers the same shape-reporting
     contract -- ``ratio_interval`` on two independent, converged ``Status.OK`` thresholds returns
-    some :class:`~marginkit.IntervalShape` -- from two small but genuinely non-separated,
+    some :class:`~robustmargin.IntervalShape` -- from two small but genuinely non-separated,
     non-shared datasets on the public API surface.
     """
-    from marginkit import (
+    from robustmargin import (
         Axis,
         Definition,
         IntervalShape,

@@ -9,7 +9,7 @@ Marked ``slow`` and excluded from the default run, mirroring
 
 Simulates from a genuinely monotone probit (``u=0.9``, ``l=0.1``, ``mu=0``, ``s=0.5``) on an
 11-level design (an exact-zero control plus ``logspace(-2, 2, 10)``), ``n=400`` per level, and
-counts how often :func:`~marginkit.check_monotonicity`'s Holm-corrected check raises **any**
+counts how often :func:`~robustmargin.check_monotonicity`'s Holm-corrected check raises **any**
 false flag across 2,000 replicates. Since the check needs only counts (Amendment 1's whole
 point), every replicate is usable regardless of whether a curve could be fit to it -- unlike the
 superseded per-``Diagnostics`` version of this simulation, there is no "failed fit" category
@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from marginkit import Axis, Observations, check_monotonicity
+from robustmargin import Axis, Observations, check_monotonicity
 
 _SEED = 20260927
 _REPLICATES = 2000

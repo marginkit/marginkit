@@ -15,9 +15,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from marginkit import Axis, Definition, Fit, Observations, Status, fit_dose_response, threshold
-from marginkit.censoring import exact_one_sided_bound
-from marginkit.types import Censoring
+from robustmargin import Axis, Definition, Fit, Observations, Status, fit_dose_response, threshold
+from robustmargin.censoring import exact_one_sided_bound
+from robustmargin.types import Censoring
 
 _LEVEL = 0.95
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tools" / "drc_reference"
@@ -61,7 +61,7 @@ class TestNotConverged:
 
     Success *rises* with severity here while ``direction="decreasing"``, so the constrained
     maximum (``s > 0``) is the flat curve and no finite ``(mu, s)`` exists. That verdict is
-    marginkit's own post-fit check on a slope that is unambiguously the wrong sign, so it does
+    robustmargin's own post-fit check on a slope that is unambiguously the wrong sign, so it does
     not depend on how any particular optimiser build happens to terminate.
 
     **This class previously probed for the other route to the same status -- a shallow
@@ -114,8 +114,8 @@ class TestNotConverged:
         Whether this fit converges is genuinely build-dependent: it returned ``NOT_CONVERGED``
         on macOS/arm64 and ``OK`` on Linux/x86_64 with identical dependency versions. Both are
         legitimate answers for a shallow curve near the edge of identifiability, and it is not
-        marginkit's job to make an optimiser terminate identically on every CPU. What *is*
-        marginkit's job is that the threshold agrees with whatever the fit decided, and that is
+        robustmargin's job to make an optimiser terminate identically on every CPU. What *is*
+        robustmargin's job is that the threshold agrees with whatever the fit decided, and that is
         what this asserts -- so the test exercises the path on both platforms and can only fail
         for a reason worth knowing about.
         """

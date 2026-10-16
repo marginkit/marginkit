@@ -18,7 +18,7 @@
   },
   "fisher_test": {
     "alternative": "greater",
-    "table_convention": "matrix(c(successes_high, failures_high, successes_low, failures_low), nrow=2, byrow=TRUE) -- marginkit's own convention, decisions/0023 Amendment 1 item 4",
+    "table_convention": "matrix(c(successes_high, failures_high, successes_low, failures_low), nrow=2, byrow=TRUE) -- robustmargin's own convention, decisions/0023 Amendment 1 item 4",
     "p_value": 1.16696240142351e-05,
     "estimate_odds_ratio": 2.2812831144809
   }

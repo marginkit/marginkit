@@ -12,19 +12,20 @@ be where the optimizer stopped (``decisions/0005``).
 
 **v1 is binomial-only.** ``model`` accepts only ``"binomial"``; a new model family (``"ll4"``,
 ``"isotonic"``) is a v0.2 addition that requires bumping ``schema_version`` again, not a silent
-extension of the current one. ``schema_version`` is now ``"3"`` (`decisions/0023`, which spent it
-on :attr:`Fit.diagnostics` and :attr:`Fit.monotonicity` -- `decisions/0022` had already spent
-``"2"`` on :data:`~marginkit.IntervalShape.HALF_OPEN`), so the v0.2 model-family addition
-anticipated here needs the bump *after* the current one, i.e. ``"4"``. The number is deliberately
-not named: :data:`marginkit.report.SCHEMA_VERSION` is the single source, and every document that
-copied a predicted number went stale together when ``"2"`` and then ``"3"`` were spent elsewhere.
+extension of the current one. ``schema_version`` is ``"4"``: the only version
+:func:`robustmargin.report.from_dict` reads, with ``"1"``, ``"2"`` and ``"3"`` (the card format of
+this package's former name, ``marginkit``) rejected. The v0.2 model-family addition anticipated
+here needs the bump *after* the current one. The number is deliberately not named:
+:data:`robustmargin.report.SCHEMA_VERSION` is the single source, and every document that copied a
+predicted number went stale together when the numbers ahead of it were spent elsewhere.
 
 As of `decisions/0023` (Phase 7), :class:`Fit` also carries :attr:`~Fit.diagnostics` (model-only
 goodness of fit, dispersion and link comparison, filled only when ``status`` is ``OK`` -- see
-:func:`marginkit.diagnose`) and :attr:`~Fit.monotonicity` (a data-only adjacent-level check,
-filled on *every* return path regardless of ``status`` -- see :func:`marginkit.check_monotonicity`
-in :mod:`marginkit.validation`). Both are reported and never acted on: neither changes ``link``,
-``params``, or any other field of the ``Fit`` they are attached to.
+:func:`robustmargin.diagnose`) and :attr:`~Fit.monotonicity` (a data-only adjacent-level check,
+filled on *every* return path regardless of ``status`` -- see
+:func:`robustmargin.check_monotonicity` in :mod:`robustmargin.validation`). Both are reported and
+never acted on: neither changes ``link``, ``params``, or any other field of the ``Fit`` they are
+attached to.
 """
 
 from __future__ import annotations
@@ -46,10 +47,10 @@ from statsmodels.genmod.generalized_linear_model import GLM
 from statsmodels.tools.sm_exceptions import ConvergenceWarning, PerfectSeparationWarning
 from statsmodels.tools.tools import add_constant
 
-from marginkit.types import Axis, Cell, JSONValue, Observations, Status, _check_finite_number
-from marginkit.validation import Diagnostics, MonotonicityCheck, check_monotonicity, diagnose
+from robustmargin.types import Axis, Cell, JSONValue, Observations, Status, _check_finite_number
+from robustmargin.validation import Diagnostics, MonotonicityCheck, check_monotonicity, diagnose
 
-# `marginkit.validation` only imports `Fit` from this module under `TYPE_CHECKING` (see that
+# `robustmargin.validation` only imports `Fit` from this module under `TYPE_CHECKING` (see that
 # module's own docstring), so this is not a circular import at runtime: by the time
 # `fit_dose_response` below actually calls `diagnose`/`check_monotonicity`, this module has
 # already finished executing this very import statement.
@@ -67,10 +68,6 @@ _VALID_LINKS: dict[str, frozenset[str]] = {
 _BINOMIAL_PARAM_NAMES = frozenset({"mu", "s", "upper", "lower"})
 _VALID_DIRECTIONS = frozenset({"decreasing", "increasing"})
 _INVALID_FIT_STATUSES = frozenset({Status.UNREACHABLE, Status.FAILS_AT_BASELINE})
-# decisions/0023 Amendment 2 (api-compat finding 1): schema "1" and "2" predate
-# Fit.diagnostics/.monotonicity entirely -- a Fit tagged with either must not carry a non-None
-# value for either field, since that version's own packaged schema has no such property.
-_PRE_DIAGNOSTICS_SCHEMA_VERSIONS = frozenset({"1", "2"})
 
 # Tolerance for Covariance's positive-definiteness check: the minimum eigenvalue must exceed
 # this, scaled by the matrix's largest magnitude entry so the tolerance is not swamped by the
@@ -313,10 +310,10 @@ class Fit:
     transformed axis (``log x`` on a log axis, ``x`` on a linear axis), not on the original
     severity scale. At ``z = 0`` -- severity ``exp(mu)`` on a log axis, or severity ``mu`` on a
     linear axis -- ``probit`` and ``logit`` both give ``P = (u + l) / 2``: the midpoint of the
-    fitted dynamic range, :meth:`~marginkit.Definition.relative` ``(0.5)``, for **any**
+    fitted dynamic range, :meth:`~robustmargin.Definition.relative` ``(0.5)``, for **any**
     asymptotes ``u``, ``l``, because the standard normal and logistic CDFs each equal ``0.5``
-    at ``z = 0``. That midpoint equals :meth:`~marginkit.Definition.absolute` ``(0.5)`` and
-    :meth:`~marginkit.Definition.baseline_fraction` ``(0.5)`` only when ``u = 1`` and
+    at ``z = 0``. That midpoint equals :meth:`~robustmargin.Definition.absolute` ``(0.5)`` and
+    :meth:`~robustmargin.Definition.baseline_fraction` ``(0.5)`` only when ``u = 1`` and
     ``l = 0``. Under ``cloglog``, which is not symmetric around ``z = 0``,
     ``F(0) = 1 - exp(-1)`` (about ``0.632``), so ``mu`` is never the midpoint of the dynamic
     range, for any asymptotes. Each entry in ``params`` records whether it was held fixed or
@@ -344,22 +341,21 @@ class Fit:
     own "Corrects" note): every object in the packaged schema has ``additionalProperties: false``,
     so a `0.1.0a4` reader would reject a card whose ``Fit`` carries either key at all, including a
     ``null`` value. That is exactly the incompatibility ``schema_version`` exists to announce, so
-    `decisions/0023` bumped it to ``"3"`` rather than adding the fields silently.
+    `decisions/0023` introduced the fields with a ``schema_version`` bump rather than silently.
 
     Attributes
     ----------
     axis
-        The :class:`~marginkit.Axis` the fit was made on.
+        The :class:`~robustmargin.Axis` the fit was made on.
     outcome
         The outcome name this fit was made against, carried over from the
-        :class:`~marginkit.Observations` it was fit to.
+        :class:`~robustmargin.Observations` it was fit to.
     direction
         ``"decreasing"`` only, in this release (see above).
     model
         The model family. Only ``"binomial"`` exists in v0.1; a new family such as ``"ll4"`` or
-        ``"isotonic"`` is a v0.2 addition requiring a further ``schema_version`` bump -- ``"2"``
-        and ``"3"`` are both already spent (`decisions/0022`, `decisions/0023`), so that bump is
-        ``"4"``.
+        ``"isotonic"`` is a v0.2 addition requiring a further ``schema_version`` bump beyond the
+        current one (:data:`robustmargin.report.SCHEMA_VERSION`).
     link
         The link function: ``"probit"``, ``"logit"`` or ``"cloglog"`` for ``model="binomial"``.
         Required; the schema's ``link`` enum carries no ``null`` alternative, so this is a
@@ -380,40 +376,41 @@ class Fit:
         present.
     cells
         The per-severity-level pooled counts the fit was made from
-        (:meth:`~marginkit.Observations.cells`). Never empty.
+        (:meth:`~robustmargin.Observations.cells`). Never empty.
     status
-        The :class:`~marginkit.Status` of this fit. Never ``UNREACHABLE`` or
+        The :class:`~robustmargin.Status` of this fit. Never ``UNREACHABLE`` or
         ``FAILS_AT_BASELINE`` (those describe a threshold, not a fit).
     cluster_ids
         Optional cluster ids the fitted data carries, one instance per distinct cluster (not
         one per row): unique, non-empty when given, and never ``None`` or ``bool`` elements.
-        Set whenever the input :class:`~marginkit.Observations` carried cluster ids, whatever
+        Set whenever the input :class:`~robustmargin.Observations` carried cluster ids, whatever
         dependence was assumed when this fit was produced -- this field reflects the data's
         structure, not a modelling choice. ``None`` means only that the data had no clusters,
-        not that independence was assumed. Used by :class:`~marginkit.Ratio`'s dependence
+        not that independence was assumed. Used by :class:`~robustmargin.Ratio`'s dependence
         guard (§5.6).
     warnings
         Free-text notes surfaced alongside the fit (for example, ``CONTROL_INCOMPATIBLE``
         carries a message suggesting ``upper="estimate"``). Empty by default.
     schema_version
-        The serialised-result schema version this object belongs to. Defaults to ``"3"``
-        (`decisions/0023`); ``from_dict`` still reads ``"1"`` and ``"2"`` cards.
+        The serialised-result schema version this object belongs to. Defaults to ``"4"``, the
+        only version ``from_dict`` reads; ``"1"``, ``"2"`` and ``"3"`` (the card format of this
+        package's former name, ``marginkit``) are rejected.
     provenance
         An opaque mapping the caller may attach to record where the inputs came from.
-        marginkit stores it and never interprets it. Empty by default.
+        robustmargin stores it and never interprets it. Empty by default.
     diagnostics
         Model-only goodness-of-fit, dispersion and link-comparison diagnostics
-        (:func:`marginkit.diagnose`, §5.7). Set exactly when ``status`` is
-        :data:`~marginkit.Status.OK` (hard constraint 3: no model-derived numbers on a failed
-        fit); ``None`` otherwise, including on every card read from schema ``"1"`` or ``"2"``
-        (which predate this field). Appended field (`decisions/0023`).
+        (:func:`robustmargin.diagnose`, §5.7). Set exactly when ``status`` is
+        :data:`~robustmargin.Status.OK` (hard constraint 3: no model-derived numbers on a failed
+        fit); ``None`` otherwise. Appended field (`decisions/0023`).
     monotonicity
         A data-only adjacent-severity-level monotonicity check
-        (:func:`marginkit.check_monotonicity`, `decisions/0023`'s "Amendment 1"), computed from
-        the raw :class:`~marginkit.Observations` before a fitting path was even chosen. Unlike
+        (:func:`robustmargin.check_monotonicity`, `decisions/0023`'s "Amendment 1"), computed from
+        the raw :class:`~robustmargin.Observations` before a fitting path was even chosen. Unlike
         ``diagnostics``, this is set on *every* fresh result regardless of ``status`` -- it needs
-        only counts, never a converged fit -- so it is ``None`` only for a card read from schema
-        ``"1"`` or ``"2"``. The last field, appended after ``diagnostics``.
+        only counts, never a converged fit. A serialised card may omit it (the schema does not
+        require it), in which case it reads back as ``None``. The last field, appended after
+        ``diagnostics``.
     """
 
     axis: Axis
@@ -428,7 +425,7 @@ class Fit:
     status: Status
     cluster_ids: tuple[str | int, ...] | None = None
     warnings: tuple[str, ...] = ()
-    schema_version: str = "3"
+    schema_version: str = "4"
     provenance: Mapping[str, JSONValue] = field(default_factory=dict)
     diagnostics: Diagnostics | None = None
     monotonicity: MonotonicityCheck | None = None
@@ -478,15 +475,6 @@ class Fit:
                 "Fit.diagnostics must be None when status is not OK (hard constraint 3: no "
                 f"model-derived numbers on a failed fit), got status={self.status!r} with "
                 "diagnostics set"
-            )
-
-        if self.schema_version in _PRE_DIAGNOSTICS_SCHEMA_VERSIONS and (
-            self.diagnostics is not None or self.monotonicity is not None
-        ):
-            raise ValueError(
-                f"Fit.schema_version={self.schema_version!r} predates diagnostics/monotonicity: "
-                "a Fit tagged with schema_version '1' or '2' must have both fields None, since "
-                "that schema version's own serialised form has no such property"
             )
 
         is_ok = self.status is Status.OK
@@ -595,7 +583,7 @@ class Fit:
         Raises
         ------
         ValueError
-            If ``self.status`` is not :data:`~marginkit.Status.OK` (a failed fit has no curve
+            If ``self.status`` is not :data:`~robustmargin.Status.OK` (a failed fit has no curve
             to evaluate -- hard constraint 3), if ``level`` is not finite, is a ``bool``, or
             does not satisfy ``0 < level < 1``, or if ``severity`` is empty or contains a
             negative or non-finite entry.
@@ -754,10 +742,10 @@ def _curve_success_and_failure_probability(
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """``(p, 1 - p)`` for the curve at ``severity``, each computed *directly* rather than one as
     the complement of the other, so both stay numerically accurate at their own informative tail
-    (`decisions/0023` Amendment 2, item 2) -- used by :func:`marginkit.diagnose`'s goodness-of-fit
-    sums, which need both ``p`` and ``1 - p`` (and their product) without either rounding to an
-    exact ``0``/``1`` for a cell that is not :func:`marginkit.diagnose`'s own *structural*
-    exclusion.
+    (`decisions/0023` Amendment 2, item 2) -- used by :func:`robustmargin.diagnose`'s
+    goodness-of-fit sums, which need both ``p`` and ``1 - p`` (and their product) without either
+    rounding to an exact ``0``/``1`` for a cell that is not :func:`robustmargin.diagnose`'s own
+    *structural* exclusion.
 
     ``p = l + (u - l) * (1 - F(z))``, using :func:`_f_survival` -- accurate where ``p`` itself is
     small (high severity, under ``direction="decreasing"``), the tail where :func:`_f_cdf` alone
@@ -1976,14 +1964,14 @@ def fit_dose_response(
     ``GenericLikelihoodModel`` -- given a likelihood, never a hand-rolled optimizer or IRLS loop
     -- for every other combination of fixed and estimated asymptotes. Both paths are checked for
     separation before fitting (plan section 5.1 item 3) and for a non-interior maximum after
-    fitting (``decisions/0005``); either gives an explicit :class:`~marginkit.Status` with no
+    fitting (``decisions/0005``); either gives an explicit :class:`~robustmargin.Status` with no
     numbers, never a value that merely happens to be where the optimizer stopped.
 
-    Before any of that, :func:`marginkit.check_monotonicity` is run on ``obs`` directly
+    Before any of that, :func:`robustmargin.check_monotonicity` is run on ``obs`` directly
     (`decisions/0023`'s "Amendment 1"), and its result is attached to the returned ``Fit`` as
     ``monotonicity`` on *every* return path below, whatever the resulting ``status`` -- the check
     needs only raw counts, so it is not hidden behind a fit that failed. ``diagnostics`` is filled
-    (via :func:`marginkit.diagnose`) only when the fit reaches :data:`~marginkit.Status.OK`.
+    (via :func:`robustmargin.diagnose`) only when the fit reaches :data:`~robustmargin.Status.OK`.
 
     Parameters
     ----------
@@ -2001,20 +1989,21 @@ def fit_dose_response(
         Required, with no default (a wrong default would silently change what curve is fit).
     dependence
         ``None`` (the default) resolves to ``"independent"`` unless ``obs.cluster`` is set, in
-        which case omitting it raises (R2) -- forwarded to :func:`marginkit.check_monotonicity`
+        which case omitting it raises (R2) -- forwarded to :func:`robustmargin.check_monotonicity`
         as-is, so there is only one implementation of this guard (`decisions/0023`'s
         "Amendment 1", item 6). ``"independent"`` may always be passed explicitly.
 
     Returns
     -------
     Fit
-        ``status`` is :data:`~marginkit.Status.OK` with all four natural-scale parameters and
-        a covariance over the estimated ones, or one of :data:`~marginkit.Status.SEPARATION`,
-        :data:`~marginkit.Status.NOT_CONVERGED` or :data:`~marginkit.Status.CONTROL_INCOMPATIBLE`
+        ``status`` is :data:`~robustmargin.Status.OK` with all four natural-scale parameters and
+        a covariance over the estimated ones, or one of :data:`~robustmargin.Status.SEPARATION`,
+        :data:`~robustmargin.Status.NOT_CONVERGED` or
+        :data:`~robustmargin.Status.CONTROL_INCOMPATIBLE`
         with no numbers and a reason in ``warnings``. ``cluster_ids`` mirrors ``obs.cluster``
         whatever the outcome. R2's dependence guard is now enforced here too, at fit time
         (`decisions/0023` "Amendment 1", item 6, via the ``check_monotonicity`` call above) --
-        :class:`~marginkit.Ratio` and :func:`marginkit.threshold` each still enforce it again
+        :class:`~robustmargin.Ratio` and :func:`robustmargin.threshold` each still enforce it again
         for their own clustered-fit inputs. ``monotonicity`` is never ``None`` on a freshly
         built ``Fit``; ``diagnostics`` is ``None`` unless ``status`` is ``OK``.
 
@@ -2026,7 +2015,7 @@ def fit_dose_response(
         itself rejects it), if ``upper``/``lower`` is not a valid probability or ``"estimate"``,
         if both are fixed with ``upper <= lower``, or if ``obs.cluster`` is set and
         ``dependence`` is not ``"independent"`` (R2, raised by
-        :func:`marginkit.check_monotonicity`).
+        :func:`robustmargin.check_monotonicity`).
     """
     if model != "binomial":
         raise ValueError(f"fit_dose_response: model must be 'binomial', got {model!r}")

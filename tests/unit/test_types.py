@@ -1,7 +1,7 @@
-"""Unit tests for ``marginkit.types``: ``Axis``, ``Observations``, ``Definition``, ``Cell``,
+"""Unit tests for ``robustmargin.types``: ``Axis``, ``Observations``, ``Definition``, ``Cell``,
 and the ``Status`` / ``IntervalShape`` enums.
 
-All of this is new to marginkit (plan section 4, Phase 3) -- there is no zeta-bench code to
+All of this is new to robustmargin (plan section 4, Phase 3) -- there is no zeta-bench code to
 port here, unlike ``grid_break_point``. Every validation rule is exercised as its own test, one
 behaviour per test, per ``CLAUDE.md``'s naming convention, so a loosened check shows up as one
 specific failing test rather than a vague one. The list of rules is the "Details the plan
@@ -15,7 +15,7 @@ from typing import Any, cast
 
 import pytest
 
-from marginkit import Axis, Cell, Definition, IntervalShape, Observations, Status
+from robustmargin import Axis, Cell, Definition, IntervalShape, Observations, Status
 
 _AXIS = Axis(name="noise", unit="m", scale="log")
 

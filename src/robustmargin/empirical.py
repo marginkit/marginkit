@@ -1,4 +1,4 @@
-"""The grid break-point rule, copied into marginkit under neutral names.
+"""The grid break-point rule, copied into robustmargin under neutral names.
 
 ``grid_break_point`` reproduces the semantics of zeta-bench's
 ``robustness/cards.py::break_point`` (commit ``435fc2793b2afdb8404099c83b0c36a71d9ffba9``,
@@ -8,8 +8,9 @@ criterion, or an explicit right-censored result when no tested level fails. See
 (empty input, non-finite values, and unsigned negative severities now raise rather than
 returning a silent fallback), and why.
 
-This module holds only the grid rule. Model-based dose-response estimation is new work, not a
-port, and is not part of this release.
+This module holds only the grid rule, which is the part ported from zeta-bench. Model-based
+dose-response estimation is new work, not a port, and lives in the other modules of this
+package.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.stats import binomtest
 
-from marginkit.types import Cell, Censoring, _check_finite_number
+from robustmargin.types import Cell, Censoring, _check_finite_number
 
 __all__ = [
     "BaselineRate",
@@ -55,26 +56,27 @@ class GridBreakPoint:
         be read as "held up to ``max_tested``" rather than as an unqualified pass.
     censoring
         A **point-estimate label for the grid**, not the censoring classification a model-based
-        threshold reports. :data:`~marginkit.types.Censoring.RIGHT` means no tested level's
+        threshold reports. :data:`~robustmargin.types.Censoring.RIGHT` means no tested level's
         performance fell below the criterion (``value is None``).
-        :data:`~marginkit.types.Censoring.NONE` means at least one did. No exact one-sided test
+        :data:`~robustmargin.types.Censoring.NONE` means at least one did. No exact one-sided test
         is applied and no monotonicity is assumed, so ``RIGHT`` here is weaker than a
         statistical lower bound. ``NONE`` does not mean the criterion was bracketed: a zero
         level that already fails gives ``value == 0.0`` with ``NONE``. The grid rule never
         produces ``LEFT``, ``OPEN_UPPER``, or ``OPEN_LOWER``.
     schema_version
         The version of the serialised result schema this object belongs to. Defaults to
-        ``"3"`` (`decisions/0023`); ``from_dict`` still reads ``"1"`` and ``"2"`` cards.
+        ``"4"``, the only version ``from_dict`` reads; ``"1"``, ``"2"`` and ``"3"`` (the card
+        format of this package's former name, ``marginkit``) are rejected.
     provenance
         An opaque mapping the caller may attach (for example with :func:`dataclasses.replace`)
-        to record where the inputs came from. marginkit stores it and never interprets it.
+        to record where the inputs came from. robustmargin stores it and never interprets it.
         Empty by default.
     """
 
     value: float | None
     max_tested: float
     censoring: Censoring
-    schema_version: str = "3"
+    schema_version: str = "4"
     provenance: Mapping[str, object] = field(default_factory=dict)
 
 
@@ -91,7 +93,7 @@ def grid_break_point(
     on the criterion passes. This is a statistic over the levels actually tested, not a fitted
     or interpolated estimate: the reported ``value`` is always one of the tested magnitudes, or
     ``None`` when the criterion held everywhere. A ``None`` value paired with
-    :data:`~marginkit.types.Censoring.RIGHT` means performance held up to ``max_tested``. It
+    :data:`~robustmargin.types.Censoring.RIGHT` means performance held up to ``max_tested``. It
     does not mean the system cannot be broken, only that breaking it was not observed within
     the range that was tested.
 
@@ -183,8 +185,8 @@ def _check_rate(value: float, *, label: str) -> None:
 
 @dataclass(frozen=True, kw_only=True)
 class BaselineRate:
-    """The zero-severity control's exact rate, attached to a :class:`~marginkit.Threshold` whose
-    ``status`` is :data:`~marginkit.Status.FAILS_AT_BASELINE` (`decisions/0010`).
+    """The zero-severity control's exact rate, attached to a :class:`~robustmargin.Threshold` whose
+    ``status`` is :data:`~robustmargin.Status.FAILS_AT_BASELINE` (`decisions/0010`).
 
     Serialisable (unlike :class:`ExactRates`): a single control cell's rate, labelled with the
     method it came from, is exactly what plan section 5.5 asks a ``FAILS_AT_BASELINE`` result to
@@ -254,7 +256,7 @@ class BaselineRate:
 @dataclass(frozen=True, kw_only=True)
 class ExactRates:
     """Per-cell exact (Clopper-Pearson-style) rate bounds for every cell in a fit (plan section
-    5.4), read directly from :attr:`marginkit.Fit.cells`.
+    5.4), read directly from :attr:`robustmargin.Fit.cells`.
 
     **Deliberately not serialisable.** This type is excluded from ``report.py``'s tagged classes
     and has no schema entry: ``report.to_dict`` raises ``TypeError`` on it. That is what
@@ -317,7 +319,7 @@ def per_cell_clopper_pearson(cells: Sequence[Cell], *, level: float = 0.95) -> E
     ``(1 - level) / 2`` in each tail -- plan section 5.4 defines a reported per-cell rate as
     ``binomtest(k, n).proportion_ci(confidence_level=..., method="exact")``, which is two-sided.
 
-    That is deliberately **not** :func:`marginkit.censoring.exact_one_sided_bound`, which
+    That is deliberately **not** :func:`robustmargin.censoring.exact_one_sided_bound`, which
     answers the different, one-sided question a censoring classification asks ("does this cell
     provably fail the target?"). The two coexist on purpose and must not be conflated: reporting
     the one-sided pair under this function's name would label a roughly ``2 * level - 1`` region
@@ -332,7 +334,7 @@ def per_cell_clopper_pearson(cells: Sequence[Cell], *, level: float = 0.95) -> E
         Defaults to ``0.95``. Plan section 5.4 defines a reported per-cell rate as
         ``binomtest(k, n).proportion_ci(confidence_level=..., method="exact")``, which is
         two-sided -- *not* the one-sided bound that decides a censoring classification. For
-        that, see ``marginkit.censoring.exact_one_sided_bound``.
+        that, see ``robustmargin.censoring.exact_one_sided_bound``.
 
     Returns
     -------

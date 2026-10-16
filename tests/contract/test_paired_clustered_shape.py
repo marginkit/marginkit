@@ -3,7 +3,7 @@
 Mirrors marginbench's shape (plan section 3.1): per-scenario, per-seed binary outcomes over a
 log-spaced severity grid plus a zero-severity control, with the same scenario ids recurring at
 every level -- clustered, not independent. Only the public API surface is used here -- no
-internal marginkit module is imported.
+internal robustmargin module is imported.
 
 A failing **live** test in this file means a breaking change to the public API marginbench
 depends on (plan section 3.3, ``docs/CONSUMERS.md``). **Do not edit a live test to make it
@@ -35,13 +35,19 @@ in this file gained ``dependence="independent"``, with a comment citing the amen
 assertion changed, since ``Fit.cluster_ids`` is set from the input data regardless of which
 ``dependence`` the fit itself was built with, and every downstream assertion in this file already
 depended only on that.
+
+**Edit recorded (decisions/0027):** the package is renamed ``robustmargin``, so every import in
+this file moved from ``marginkit`` to it, and nothing else changed -- no assertion, no call
+shape. That is a breaking change signed off in ``decisions/0027`` (Appendix B item 2), not an
+edit made to turn a failing contract test green. marginbench does not exist yet, so no consumer
+of this shape is affected by the rename.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from marginkit import Axis, Cell, Observations
+from robustmargin import Axis, Cell, Observations
 
 _AXIS = Axis(name="noise", unit="ratio", scale="log")
 
@@ -108,7 +114,7 @@ def test_fit_dose_response_on_clustered_input_without_dependence_raises() -> Non
     ``dependence`` argument through to the monotonicity check it computes before choosing a
     fitting path, so a clustered ``Observations`` with no ``dependence=`` raises at *fit* time,
     not only at the later ``threshold()``/``ratio_interval()`` calls this file already covers."""
-    from marginkit import fit_dose_response
+    from robustmargin import fit_dose_response
 
     severity, success, cluster = _clustered_rows()
     obs = Observations.from_observations(
@@ -126,7 +132,7 @@ def test_fit_dose_response_on_clustered_input_without_dependence_raises() -> Non
 
 def test_threshold_on_clustered_input_without_independent_dependence_raises() -> None:
     """R2: a method that assumes independence must refuse clustered input outright."""
-    from marginkit import Definition, fit_dose_response, threshold
+    from robustmargin import Definition, fit_dose_response, threshold
 
     severity, success, cluster = _clustered_rows()
     obs = Observations.from_observations(
@@ -159,7 +165,7 @@ def test_paired_ratio_between_two_thresholds_on_the_same_clustered_fit_is_not_im
     R2's clustered-input guard would otherwise raise here, before ever reaching the
     ``dependence="paired"`` call this test exists to check.
     """
-    from marginkit import Definition, fit_dose_response, ratio_interval, threshold
+    from robustmargin import Definition, fit_dose_response, ratio_interval, threshold
 
     severity, success, cluster = _clustered_rows()
     obs = Observations.from_observations(

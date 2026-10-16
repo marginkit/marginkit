@@ -1,5 +1,5 @@
-"""Unit tests for the data-only monotonicity check: :class:`~marginkit.MonotonicityCheck`,
-:class:`~marginkit.AdjacentPair` and :func:`~marginkit.check_monotonicity`
+"""Unit tests for the data-only monotonicity check: :class:`~robustmargin.MonotonicityCheck`,
+:class:`~robustmargin.AdjacentPair` and :func:`~robustmargin.check_monotonicity`
 (``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``'s "Amendment 1").
 
 Amendment 1 moves this check off ``Diagnostics`` (which needs a converged fit) and onto
@@ -22,7 +22,7 @@ import pytest
 from scipy.stats import fisher_exact
 from statsmodels.stats.multitest import multipletests
 
-from marginkit import (
+from robustmargin import (
     AdjacentPair,
     Axis,
     Definition,

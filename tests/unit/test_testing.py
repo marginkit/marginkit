@@ -1,4 +1,4 @@
-"""Unit tests for ``marginkit.testing``: ``fake_fit``, ``fake_threshold`` and ``fake_ratio``.
+"""Unit tests for ``robustmargin.testing``: ``fake_fit``, ``fake_threshold`` and ``fake_ratio``.
 
 Every combination plan section 5.5 allows must produce a schema-valid, round-tripping object;
 every combination it forbids must raise ``ValueError``. A fake that is not schema-valid would
@@ -21,7 +21,7 @@ import math
 import jsonschema
 import pytest
 
-from marginkit import (
+from robustmargin import (
     Censoring,
     Fit,
     IntervalShape,
@@ -30,8 +30,8 @@ from marginkit import (
     check_monotonicity,
     diagnose,
 )
-from marginkit.report import from_dict, load_schema, to_dict
-from marginkit.testing import fake_fit, fake_ratio, fake_threshold
+from robustmargin.report import from_dict, load_schema, to_dict
+from robustmargin.testing import fake_fit, fake_ratio, fake_threshold
 
 # Round 2, rule 9: Fit.status may never be UNREACHABLE or FAILS_AT_BASELINE (those describe
 # whether a *threshold* can be solved given a successful fit, not whether the fit itself
@@ -131,8 +131,8 @@ def _observations_from_fit_cells(fit: Fit) -> Observations:
 
 class TestFakeFitMirrorsARealFit:
     """decisions/0023 Amendment 2, item 4: ``fake_fit`` fills ``monotonicity`` through
-    :func:`~marginkit.check_monotonicity` on its own cells for *every* status, and
-    ``diagnostics`` through :func:`~marginkit.diagnose` when ``status`` is ``OK`` -- the same way
+    :func:`~robustmargin.check_monotonicity` on its own cells for *every* status, and
+    ``diagnostics`` through :func:`~robustmargin.diagnose` when ``status`` is ``OK`` -- the same way
     ``fake_threshold`` already builds ``baseline`` through the real
     ``per_cell_clopper_pearson`` path rather than a hand-typed placeholder. Explicit
     ``diagnostics=``/``monotonicity=`` arguments still override (unchanged from before this

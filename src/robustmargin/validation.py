@@ -9,11 +9,11 @@ Two independent things live here, deliberately kept apart (Amendment 1's own rat
 
 - :class:`Diagnostics` / :func:`diagnose` need a converged fit -- goodness of fit, dispersion,
   and link comparison are all statements about how well a fitted curve matches the data, so they
-  are ``None`` whenever :attr:`~marginkit.Fit.status` is not :data:`~marginkit.Status.OK`
+  are ``None`` whenever :attr:`~robustmargin.Fit.status` is not :data:`~robustmargin.Status.OK`
   (hard constraint 3, read as "no model-derived numbers on a failed fit").
 - :class:`MonotonicityCheck` / :func:`check_monotonicity` need only raw per-level counts -- an
   exact one-sided Fisher test on adjacent severity levels, Holm-corrected across the family. It
-  therefore runs on *every* :func:`~marginkit.fit_dose_response` return path, whatever the
+  therefore runs on *every* :func:`~robustmargin.fit_dose_response` return path, whatever the
   ``Status``, because non-monotone data is a common cause of a failed fit and disappearing the
   check exactly then would hide the finding it exists to surface.
 
@@ -34,16 +34,16 @@ from scipy.special import xlogy
 from scipy.stats import fisher_exact
 from statsmodels.stats.multitest import multipletests
 
-from marginkit.types import Cell, Observations, Status, _check_finite_number
+from robustmargin.types import Cell, Observations, Status, _check_finite_number
 
 if TYPE_CHECKING:
     # Only for the `diagnose(fit: Fit)` annotation. `from __future__ import annotations` (above)
     # makes every annotation in this module a string, so this import is never evaluated at
     # runtime -- it exists purely for mypy, and keeps this module from ever importing
-    # marginkit.models at import time (models.py imports *this* module at its own top level, to
+    # robustmargin.models at import time (models.py imports *this* module at its own top level, to
     # build Fit.diagnostics/Fit.monotonicity and to call diagnose()/check_monotonicity() from
     # fit_dose_response; the reverse, real import would be a cycle).
-    from marginkit.models import Fit
+    from robustmargin.models import Fit
 
 __all__ = [
     "AdjacentPair",
@@ -85,9 +85,9 @@ class Diagnostics:
     moved the monotonicity check off this type entirely -- see :class:`MonotonicityCheck`).
 
     Built only from a converged fit (:func:`diagnose` requires ``fit.status is Status.OK``), and
-    attached to :attr:`~marginkit.Fit.diagnostics` only in that case: ``None`` whenever the fit
+    attached to :attr:`~robustmargin.Fit.diagnostics` only in that case: ``None`` whenever the fit
     failed (hard constraint 3, read as "no model-derived numbers on a failed fit"). Contrast
-    :class:`MonotonicityCheck`, attached to :attr:`~marginkit.Fit.monotonicity` on *every*
+    :class:`MonotonicityCheck`, attached to :attr:`~robustmargin.Fit.monotonicity` on *every*
     ``fit_dose_response`` return path regardless of ``Status`` -- the two appended fields on
     ``Fit`` have different nullability for exactly this reason.
 
@@ -127,9 +127,9 @@ class Diagnostics:
         reuses its own ``log_likelihood`` and parameter count directly (never refit, so it is
         exact by construction); the other two links are refit through the existing statsmodels
         fitting paths (hard constraint 2). ``None`` for a link whose refit does not reach
-        :data:`~marginkit.Status.OK` -- see ``link_status``.
+        :data:`~robustmargin.Status.OK` -- see ``link_status``.
     link_status
-        The :class:`~marginkit.Status` of each link's own fit (the diagnosed fit's own status,
+        The :class:`~robustmargin.Status` of each link's own fit (the diagnosed fit's own status,
         which is always ``OK``, for its own link; the refit's status for the other two).
         ``link_aic[link] is None`` if and only if ``link_status[link] is not Status.OK``.
     warnings
@@ -226,7 +226,7 @@ class AdjacentPair:
     severity_low, severity_high
         The two adjacent severity levels, ``severity_low < severity_high``.
     successes_low, trials_low, successes_high, trials_high
-        The raw pooled counts at each level (:meth:`~marginkit.Observations.cells`).
+        The raw pooled counts at each level (:meth:`~robustmargin.Observations.cells`).
     p_value
         The raw one-sided Fisher exact p-value for a reversal against ``direction`` (that is, the
         higher severity performing *better* than the lower one, which is evidence against
@@ -300,8 +300,8 @@ class MonotonicityCheck:
     family.
 
     Needs only raw counts, never a fitted curve, so it is attached to
-    :attr:`~marginkit.Fit.monotonicity` on *every* :func:`~marginkit.fit_dose_response` return
-    path, whatever the resulting :class:`~marginkit.Status` -- contrast :class:`Diagnostics`,
+    :attr:`~robustmargin.Fit.monotonicity` on *every* :func:`~robustmargin.fit_dose_response` return
+    path, whatever the resulting :class:`~robustmargin.Status` -- contrast :class:`Diagnostics`,
     which needs a converged fit and is ``None`` otherwise. See :func:`check_monotonicity`.
 
     Attributes
@@ -497,12 +497,12 @@ def check_monotonicity(
 
 def _success_and_failure_probabilities(fit: Fit) -> tuple[np.ndarray, np.ndarray]:
     """``(p, 1 - p)`` per cell of ``fit.cells``, from the one shared curve formula in
-    ``marginkit.models`` (S1, Phase 7 stats review) -- never a second copy of it here. Imported
-    inside this function, not at module scope, since ``marginkit.models`` imports this module at
+    ``robustmargin.models`` (S1, Phase 7 stats review) -- never a second copy of it here. Imported
+    inside this function, not at module scope, since ``robustmargin.models`` imports this module at
     *its* top level (see this module's own docstring on the import cycle); by the time any
-    ``Fit`` exists to diagnose, ``marginkit.models`` has already finished importing.
+    ``Fit`` exists to diagnose, ``robustmargin.models`` has already finished importing.
     """
-    from marginkit.models import _curve_success_and_failure_probability  # local: see docstring
+    from robustmargin.models import _curve_success_and_failure_probability  # local: see docstring
 
     assert fit.params is not None  # diagnose() only calls this for an OK fit
     mu = fit.params["mu"].value
@@ -518,18 +518,18 @@ def _success_and_failure_probabilities(fit: Fit) -> tuple[np.ndarray, np.ndarray
 def _refit_link(fit: Fit, link: str) -> Fit:
     """Refit ``fit``'s data under ``link``, holding the same ``upper``/``lower`` specification
     (both fixed/estimate flags and, when fixed, the same value). Goes through the existing
-    private statsmodels fitting paths in ``marginkit.models`` (hard constraint 2: no new
+    private statsmodels fitting paths in ``robustmargin.models`` (hard constraint 2: no new
     optimizer or IRLS) -- imported here, inside the function, rather than at module scope, since
-    by the time any ``Fit`` exists to diagnose, ``marginkit.models`` has already finished
+    by the time any ``Fit`` exists to diagnose, ``robustmargin.models`` has already finished
     importing this module (see this module's own docstring).
 
     Skips the separation and control-incompatibility pre-checks ``fit_dose_response`` itself
     runs before calling either fitting path: both are properties of the data and the
     ``upper``/``lower`` configuration, not of the link, and ``fit`` already reached
-    :data:`~marginkit.Status.OK` under the very same data and configuration, so a different link
+    :data:`~robustmargin.Status.OK` under the very same data and configuration, so a different link
     cannot newly trigger either one.
     """
-    from marginkit.models import _fit_generic, _fit_glm  # local: see docstring above
+    from robustmargin.models import _fit_generic, _fit_glm  # local: see docstring above
 
     assert fit.params is not None  # diagnose() only calls this for an OK fit
     upper_param = fit.params["upper"]
@@ -625,8 +625,8 @@ def diagnose(fit: Fit) -> Diagnostics:
     ----------
     fit
         The fit to diagnose. Must have ``status is Status.OK`` (hard constraint 3: a failed fit
-        carries no model-derived numbers -- :func:`~marginkit.fit_dose_response` itself only
-        calls this for an ``OK`` fit and leaves :attr:`~marginkit.Fit.diagnostics` ``None``
+        carries no model-derived numbers -- :func:`~robustmargin.fit_dose_response` itself only
+        calls this for an ``OK`` fit and leaves :attr:`~robustmargin.Fit.diagnostics` ``None``
         otherwise).
 
     Returns
@@ -636,7 +636,7 @@ def diagnose(fit: Fit) -> Diagnostics:
     Raises
     ------
     ValueError
-        If ``fit.status`` is not :data:`~marginkit.Status.OK`.
+        If ``fit.status`` is not :data:`~robustmargin.Status.OK`.
     """
     if fit.status is not Status.OK:
         raise ValueError(

@@ -1,7 +1,7 @@
-"""marginkit's shared vocabulary for severity and outcome data.
+"""robustmargin's shared vocabulary for severity and outcome data.
 
 ``Censoring`` is the model-based and grid-rule censoring classification (documented on the
-class itself). Everything else here is new to marginkit as of Phase 3: ``Axis`` describes the
+class itself). Everything else here is new to robustmargin as of Phase 3: ``Axis`` describes the
 severity axis a series of observations was measured on; ``Observations`` holds the raw
 aggregated-or-per-observation data a fit is built from; ``Definition`` names which of three
 target-performance definitions a threshold solves for; ``Cell`` is one pooled row of counts at
@@ -44,9 +44,9 @@ class Censoring(StrEnum):
     monotone in severity, and a result that uses it says so. ``RIGHT`` and ``LEFT`` are decided
     by exact one-sided tests at the edge of the tested range, not by point estimates.
 
-    **The grid rule** (:func:`marginkit.grid_break_point`) uses only ``NONE`` and ``RIGHT``, and
+    **The grid rule** (:func:`robustmargin.grid_break_point`) uses only ``NONE`` and ``RIGHT``, and
     only as point-estimate labels, with no exact test and no monotonicity assumption. Their
-    meaning for a grid result is documented on :class:`marginkit.GridBreakPoint` and is weaker
+    meaning for a grid result is documented on :class:`robustmargin.GridBreakPoint` and is weaker
     than the definitions below.
 
     Attributes
@@ -145,9 +145,10 @@ class IntervalShape(StrEnum):
         ``lo`` never arises under ``dependence="independent"``, `decisions/0022`). **Unreachable
         in v0.1**: under ``dependence="independent"`` the covariance term is 0, which forces
         opposite-signed roots whenever this branch's other conditions hold, so the real result is
-        always ``HALF_OPEN`` instead (`decisions/0022`). The member and :class:`~marginkit.Ratio`'s
-        invariants for it stay enforced against v0.2's ``dependence="paired"``, which can make the
-        covariance term nonzero and reach this shape for the first time.
+        always ``HALF_OPEN`` instead (`decisions/0022`). The member and
+        :class:`~robustmargin.Ratio`'s invariants for it stay enforced against v0.2's
+        ``dependence="paired"``, which can make the covariance term nonzero and reach this shape
+        for the first time.
     HALF_OPEN
         One ray, ``[lo, inf)``: ``lo`` is set, ``hi`` is ``None``. This is what plan §5.6's
         original two-ray ``EXCLUSIVE`` case actually is once intersected with the positive
@@ -238,7 +239,7 @@ class Definition:
     Three definitions are in play, and they coincide only when the fitted curve's asymptotes
     are exactly 1 and 0:
 
-    - ``absolute(a)``: performance crosses a fixed level ``a`` (zeta-bench's gate, at 0.95).
+    - ``absolute(a)``: performance crosses a fixed level ``a``.
       Whether ``a`` is reachable given the fitted asymptotes is decided at threshold-solving
       time (:data:`Status.UNREACHABLE`), not at construction time, so any finite ``a`` --
       including one that looks out of range, such as 1.5 -- constructs successfully.
@@ -321,7 +322,7 @@ def _check_counts(
 @dataclass(frozen=True, kw_only=True)
 class Cell:
     """One pooled row of counts at a single severity: the unit :meth:`Observations.cells`
-    returns and :class:`marginkit.Fit` stores its per-level table as.
+    returns and :class:`robustmargin.Fit` stores its per-level table as.
 
     Attributes
     ----------

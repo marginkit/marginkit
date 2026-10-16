@@ -1,4 +1,4 @@
-"""Reference-value parity for :func:`~marginkit.diagnose` against R's ``glm`` on ``finney71``
+"""Reference-value parity for :func:`~robustmargin.diagnose` against R's ``glm`` on ``finney71``
 (plan sections 6.1, 5.7; ``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``).
 
 This file never runs R and never needs R installed -- it reads only the committed
@@ -26,10 +26,10 @@ rather than silently skipped).
 before ever calling ``glm``, because ``log(0)`` is undefined and would make the ``glm`` call
 fail outright, not because ``glm`` has any special handling for an all-success control. The
 resulting 5-row ``glm`` fit's ``df.residual`` (5 rows minus 2 estimated parameters) is what
-``df == 3`` is compared against here. This is a **different** exclusion from marginkit's own:
+``df == 3`` is compared against here. This is a **different** exclusion from robustmargin's own:
 ``diagnose()`` excludes the ``dose == 0`` cell *structurally* -- a log-axis cell at severity
 exactly ``0`` when ``upper`` is fixed at exactly ``1.0`` (Amendment 2, item 1) -- because that
-cell has zero variance and zero deviance by construction under marginkit's own curve, not
+cell has zero variance and zero deviance by construction under robustmargin's own curve, not
 because a numerically-saturated fitted probability was excluded (the pre-Amendment-2
 implementation's bug, C1: excluding by *computed value* rather than by structure made ``df``
 depend on the link). The two exclusions happen to agree on `finney71` (both drop exactly the
@@ -50,7 +50,7 @@ import pytest
 from scipy.special import xlogy
 from scipy.stats import norm
 
-from marginkit import Axis, Observations, Status, diagnose, fit_dose_response
+from robustmargin import Axis, Observations, Status, diagnose, fit_dose_response
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tools" / "drc_reference"
 _REL_TOL = 1e-4  # plan section 6.1
@@ -146,7 +146,7 @@ class TestGoodnessOfFitAgainstRsOwnCoefficients:
     def test_df_excludes_the_all_success_zero_dose_control(
         self, _fits: dict[str, Any], link: str
     ) -> None:
-        """5 dose>0 rows minus 2 estimated parameters (mu, s; upper/lower fixed). marginkit
+        """5 dose>0 rows minus 2 estimated parameters (mu, s; upper/lower fixed). robustmargin
         excludes the dose=0 control *structurally* (a log-axis severity-0 cell under a fixed
         upper=1.0, decisions/0023 Amendment 2 item 1) -- not because its fitted probability
         happens to round to exactly 1.0. R's glm never even sees that row: generate.R subsets it
@@ -205,7 +205,7 @@ class TestAgainstRNativeGofFields:
 class TestDrcVsGlmDfComparisonNote:
     """decisions/0023 Amendment 2's factual correction, recorded next to the fixture by
     ``generate.R`` (this phase): drc's ``drm()`` fits the full 6-row ``finney71`` (its own
-    ``df.residual`` is 4), where ``glm()`` here and marginkit's own ``diagnose()`` both report 3
+    ``df.residual`` is 4), where ``glm()`` here and robustmargin's own ``diagnose()`` both report 3
     -- for two different reasons that happen to agree, not because drc "gets it wrong". This
     class needs the ``df_comparison_note`` field ``generate.R`` now emits, which is not in the
     committed fixture yet -- ``KeyError`` until regenerated, same treatment as
@@ -224,7 +224,7 @@ class TestDrcVsGlmDfComparisonNote:
 
         assert note["glm_df_residual"] == 3
 
-    def test_marginkit_diagnose_df_matches_glm_not_drc(self, _fits: dict[str, Any]) -> None:
+    def test_robustmargin_diagnose_df_matches_glm_not_drc(self, _fits: dict[str, Any]) -> None:
         fixture = _load("finney71.json")
         note = fixture["df_comparison_note"]  # KeyError until regenerated
 

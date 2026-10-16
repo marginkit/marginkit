@@ -1,4 +1,4 @@
-"""Property tests for ``marginkit.empirical.grid_break_point`` (hypothesis).
+"""Property tests for ``robustmargin.empirical.grid_break_point`` (hypothesis).
 
 Invariants that must hold for any valid input, not just the hand-picked cases in
 ``tests/unit/test_empirical.py``: permutation invariance, ``value`` is always one of the
@@ -16,7 +16,7 @@ import math
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from marginkit import Censoring, grid_break_point
+from robustmargin import Censoring, grid_break_point
 
 _MAX_EXAMPLES = 100
 
@@ -174,7 +174,7 @@ def test_agrees_with_zeta_bench_two_line_rule(
     expected_value = failing[0] if failing else None
 
     # signed=True always, since the reference rule always breaks on magnitude (cards.py never
-    # validates sign — that check is marginkit's own addition).
+    # validates sign — that check is robustmargin's own addition).
     result = grid_break_point(severity, performance, criterion=criterion, signed=True)
 
     assert result.value == expected_value

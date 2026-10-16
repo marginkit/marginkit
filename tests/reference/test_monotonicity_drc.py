@@ -6,7 +6,7 @@ Two independent cross-checks, so this file has "teeth" even before
 
 1. **``scipy.stats.fisher_exact`` directly** (``TestAgainstScipyDirectly``) -- runs today, no
    fixture needed, and pins the exact table/alternative convention
-   (``docs/decisions/0023``'s Amendment 1, item 4) marginkit's own ``check_monotonicity`` must
+   (``docs/decisions/0023``'s Amendment 1, item 4) robustmargin's own ``check_monotonicity`` must
    reproduce.
 2. **R's own ``fisher.test(..., alternative="greater")``**
    (``TestAgainstRsFisherTest``), read from the fixture ``generate.R`` now emits. This fails with
@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 from scipy.stats import fisher_exact
 
-from marginkit import Axis, Observations, check_monotonicity
+from robustmargin import Axis, Observations, check_monotonicity
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tools" / "drc_reference"
 _REL_TOL = 1e-4  # plan section 6.1

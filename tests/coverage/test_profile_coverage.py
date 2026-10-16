@@ -1,7 +1,7 @@
 """Coverage simulations for threshold intervals (plan section 6.3).
 
 These are the only tests in the suite that check the *method* rather than the implementation.
-The reference tests in ``tests/reference/`` prove marginkit computes the same numbers R does;
+The reference tests in ``tests/reference/`` prove robustmargin computes the same numbers R does;
 they cannot tell whether a 95% interval covers the truth 95% of the time. That is what this
 file measures, by simulating from a known probit and counting how often the interval contains
 the true threshold.
@@ -27,7 +27,7 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Censoring,
     Definition,

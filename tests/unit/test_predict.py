@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from marginkit import Axis, Fit, Observations, Prediction, Status, fit_dose_response
-from marginkit.testing import fake_fit
+from robustmargin import Axis, Fit, Observations, Prediction, Status, fit_dose_response
+from robustmargin.testing import fake_fit
 
 _LOG_AXIS = Axis(name="sensor_noise", unit="m", scale="log")
 

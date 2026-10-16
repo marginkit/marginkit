@@ -1,4 +1,4 @@
-"""Property tests for :func:`~marginkit.diagnose` (plan section 6.4; hypothesis;
+"""Property tests for :func:`~robustmargin.diagnose` (plan section 6.4; hypothesis;
 ``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``).
 
 Three properties, mirroring ``tests/property/test_models_properties.py``'s own conventions and
@@ -29,7 +29,7 @@ from __future__ import annotations
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from marginkit import Axis, Fit, Observations, Status, diagnose, fit_dose_response
+from robustmargin import Axis, Fit, Observations, Status, diagnose, fit_dose_response
 
 _MAX_EXAMPLES = 25
 _AXIS = Axis(name="severity", unit="unit", scale="log")

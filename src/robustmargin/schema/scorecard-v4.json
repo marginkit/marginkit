@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:marginkit:schema:scorecard-v1",
-  "title": "marginkit score card (v1)",
-  "description": "A marginkit Scorecard: a collection of GridBreakPoint, Fit, Threshold and Ratio results plus provenance metadata. v1 is binomial-only: Fit.model accepts only \"binomial\", Fit.direction and Threshold.direction accept only \"decreasing\", and Ratio.dependence accepts only \"independent\". A new result family or enum value (ll4, isotonic, paired) is a schema_version \"2\" change, not a silent extension of this one. Each object's `properties` keys are kept in exact parity with its dataclass's field names (plus `type` for the five tagged result types) by tests/unit/test_report.py::TestSchemaFieldParity, so this file cannot silently drift from src/marginkit. additionalProperties is false everywhere: an unrecognised field is a reader/writer version mismatch, not a safe extension, in this schema version.",
+  "$id": "urn:robustmargin:schema:scorecard-v4",
+  "title": "robustmargin score card (v4)",
+  "description": "A robustmargin Scorecard: a collection of GridBreakPoint, Fit, Threshold and Ratio results plus provenance metadata. This is schema version \"4\", the only version robustmargin reads. Schema versions \"1\" to \"3\" were the card format of this package's former name, marginkit, which named the Scorecard field now called library_version as marginkit_version; a reader of this version rejects them. Fit.diagnostics is an object or null, set only when the fit's own status is OK (model-only goodness of fit, dispersion and link comparison -- see the Diagnostics def, which deliberately has no monotonicity entry of its own); Fit.monotonicity is an object or null, set on every fresh Fit regardless of status (a data-only adjacent-severity-level check on raw counts -- see the MonotonicityCheck and AdjacentPair defs). Neither field is required on Fit: a payload that omits either still validates and still loads through from_dict with that field None. IntervalShape.HALF_OPEN is valid; Fit.model accepts only \"binomial\", Fit.direction and Threshold.direction accept only \"decreasing\", and Ratio.dependence accepts only \"independent\". A new result family or enum value beyond this (ll4, isotonic, paired) is a further schema_version change, not a silent extension of this one. Each object's `properties` keys are kept in exact parity with its dataclass's field names (plus `type` for the five tagged result types) by tests/unit/test_report.py::TestSchemaFieldParity, so this file cannot silently drift from src/robustmargin. additionalProperties is false everywhere: an unrecognised field is a reader/writer version mismatch, not a safe extension, in this schema version.",
   "type": "object",
   "properties": {
     "type": {
@@ -33,7 +33,7 @@
     "created_at": {
       "type": "string"
     },
-    "marginkit_version": {
+    "library_version": {
       "type": "string"
     },
     "schema_version": {
@@ -44,14 +44,14 @@
     "type",
     "results",
     "created_at",
-    "marginkit_version",
+    "library_version",
     "schema_version"
   ],
   "additionalProperties": false,
   "$defs": {
     "GridBreakPoint": {
       "type": "object",
-      "description": "marginkit.GridBreakPoint: the grid break-point rule's result (an observed statistic, not a fitted threshold).",
+      "description": "robustmargin.GridBreakPoint: the grid break-point rule's result (an observed statistic, not a fitted threshold).",
       "properties": {
         "type": {
           "const": "GridBreakPoint"
@@ -85,7 +85,7 @@
     },
     "Fit": {
       "type": "object",
-      "description": "marginkit.Fit: a dose-response fit, or an explicit record of why one was not obtained. v1 is binomial-only: model accepts only \"binomial\" and direction accepts only \"decreasing\" (an increasing-is-worse definition is pending owner decision D5). params are on the natural scale, never the optimiser's reparametrisation.",
+      "description": "robustmargin.Fit: a dose-response fit, or an explicit record of why one was not obtained. This schema is binomial-only: model accepts only \"binomial\" and direction accepts only \"decreasing\" (an increasing-is-worse definition is pending owner decision D5). params are on the natural scale, never the optimiser's reparametrisation.",
       "properties": {
         "type": {
           "const": "Fit"
@@ -194,6 +194,28 @@
         },
         "provenance": {
           "type": "object"
+        },
+        "diagnostics": {
+          "description": "Model-only goodness of fit, dispersion and link comparison (decisions/0023, plan section 5.7). Set exactly when this Fit's own status is OK; null otherwise.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/Diagnostics"
+            }
+          ]
+        },
+        "monotonicity": {
+          "description": "A data-only adjacent-severity-level monotonicity check (decisions/0023 \"Amendment 1\"), computed from the raw Observations before a fitting path was chosen. Set on every freshly-built Fit regardless of status; null only when a payload omits it.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/MonotonicityCheck"
+            }
+          ]
         }
       },
       "required": [
@@ -213,7 +235,7 @@
     },
     "Threshold": {
       "type": "object",
-      "description": "marginkit.Threshold: where a fitted curve crosses a target performance, with a confidence interval, or an explicit record of why no value is reported. v1 direction accepts only \"decreasing\" (owner decision D5 pending for increasing-is-worse outcomes). Per-level trial counts live on fit.cells, not on a separate field.",
+      "description": "robustmargin.Threshold: where a fitted curve crosses a target performance, with a confidence interval, or an explicit record of why no value is reported. direction accepts only \"decreasing\" (owner decision D5 pending for increasing-is-worse outcomes). Per-level trial counts live on fit.cells, not on a separate field.",
       "properties": {
         "type": {
           "const": "Threshold"
@@ -325,7 +347,7 @@
     },
     "Ratio": {
       "type": "object",
-      "description": "marginkit.Ratio: the ratio of two thresholds' severities, on the same axis, with a confidence interval. A failed or censored ratio (status != OK or censoring != NONE) carries shape=null, estimate=null, lo=null, hi=null -- no numbers. v1 dependence accepts only \"independent\" (v0.2 adds \"paired\").",
+      "description": "robustmargin.Ratio: the ratio of two thresholds' severities, on the same axis, with a confidence interval. A failed or censored ratio (status != OK or censoring != NONE) carries shape=null, estimate=null, lo=null, hi=null -- no numbers. dependence accepts only \"independent\" (a later release adds \"paired\"). IntervalShape.HALF_OPEN (decisions/0022) means lo set, hi null, i.e. [lo, inf); EXCLUSIVE stays a valid shape (its Ratio invariants are still enforced) but is unreachable from ratio_interval() while dependence=\"independent\".",
       "properties": {
         "type": {
           "const": "Ratio"
@@ -415,7 +437,7 @@
     },
     "Axis": {
       "type": "object",
-      "description": "marginkit.Axis: the severity axis a series of observations was measured on.",
+      "description": "robustmargin.Axis: the severity axis a series of observations was measured on.",
       "properties": {
         "name": {
           "type": "string"
@@ -445,7 +467,7 @@
     },
     "Definition": {
       "type": "object",
-      "description": "marginkit.Definition: which target performance a threshold solves for.",
+      "description": "robustmargin.Definition: which target performance a threshold solves for.",
       "properties": {
         "kind": {
           "enum": [
@@ -466,7 +488,7 @@
     },
     "Cell": {
       "type": "object",
-      "description": "marginkit.Cell: one pooled row of counts at a single severity.",
+      "description": "robustmargin.Cell: one pooled row of counts at a single severity.",
       "properties": {
         "severity": {
           "type": "number"
@@ -487,7 +509,7 @@
     },
     "Parameter": {
       "type": "object",
-      "description": "marginkit.Parameter: one fitted or fixed parameter value, on the natural scale (never the optimiser's log/logit reparametrisation).",
+      "description": "robustmargin.Parameter: one fitted or fixed parameter value, on the natural scale (never the optimiser's log/logit reparametrisation).",
       "properties": {
         "value": {
           "type": "number"
@@ -504,7 +526,7 @@
     },
     "Covariance": {
       "type": "object",
-      "description": "marginkit.Covariance: the variance-covariance matrix of a fit's estimated (non-fixed) parameters, on the natural scale. Positive semi-definite.",
+      "description": "robustmargin.Covariance: the variance-covariance matrix of a fit's estimated (non-fixed) parameters, on the natural scale. Positive semi-definite.",
       "properties": {
         "names": {
           "type": "array",
@@ -554,12 +576,13 @@
       "enum": [
         "BOUNDED",
         "UNBOUNDED",
-        "EXCLUSIVE"
+        "EXCLUSIVE",
+        "HALF_OPEN"
       ]
     },
     "BaselineRate": {
       "type": "object",
-      "description": "marginkit.BaselineRate: the control cell's observed rate with its exact (Clopper-Pearson) interval, reported when a Threshold's status is FAILS_AT_BASELINE (plan section 5.5, decisions/0010). An untagged helper, like Cell: it appears only as Threshold.baseline. Its lo/hi are a per-cell exact interval and are deliberately NOT a threshold interval -- plan section 5.4 forbids attaching Clopper-Pearson to a threshold, which is why these live here and never in Threshold.lo/.hi.",
+      "description": "robustmargin.BaselineRate: the control cell's observed rate with its exact (Clopper-Pearson) interval, reported when a Threshold's status is FAILS_AT_BASELINE (plan section 5.5, decisions/0010). An untagged helper, like Cell: it appears only as Threshold.baseline. Its lo/hi are a per-cell exact interval and are deliberately NOT a threshold interval -- plan section 5.4 forbids attaching Clopper-Pearson to a threshold, which is why these live here and never in Threshold.lo/.hi.",
       "properties": {
         "severity": {
           "type": "number"
@@ -596,6 +619,157 @@
         "rate",
         "lo",
         "hi"
+      ],
+      "additionalProperties": false
+    },
+    "Diagnostics": {
+      "type": "object",
+      "description": "robustmargin.Diagnostics: model-only fit diagnostics -- goodness of fit, dispersion and link comparison, reported and never acted on automatically (plan section 5.7, decisions/0023 as amended by that decision's \"Amendment 1\", which moved the monotonicity check off this type entirely onto MonotonicityCheck). An untagged helper, like BaselineRate: it appears only as Fit.diagnostics, and only when that Fit's own status is OK.",
+      "properties": {
+        "deviance": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pearson_chi2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "df": {
+          "type": "integer"
+        },
+        "dispersion": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "link_aic": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "link_status": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Status"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "deviance",
+        "pearson_chi2",
+        "df",
+        "dispersion",
+        "link_aic",
+        "link_status"
+      ],
+      "additionalProperties": false
+    },
+    "AdjacentPair": {
+      "type": "object",
+      "description": "robustmargin.AdjacentPair: one adjacent-severity-level pair from a MonotonicityCheck, with its raw counts, one-sided Fisher exact p-value and Holm-adjusted p-value (decisions/0023 \"Amendment 1\").",
+      "properties": {
+        "severity_low": {
+          "type": "number"
+        },
+        "severity_high": {
+          "type": "number"
+        },
+        "successes_low": {
+          "type": "integer"
+        },
+        "trials_low": {
+          "type": "integer"
+        },
+        "successes_high": {
+          "type": "integer"
+        },
+        "trials_high": {
+          "type": "integer"
+        },
+        "p_value": {
+          "type": "number"
+        },
+        "holm_adjusted_p": {
+          "type": "number"
+        },
+        "flagged": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "severity_low",
+        "severity_high",
+        "successes_low",
+        "trials_low",
+        "successes_high",
+        "trials_high",
+        "p_value",
+        "holm_adjusted_p",
+        "flagged"
+      ],
+      "additionalProperties": false
+    },
+    "MonotonicityCheck": {
+      "type": "object",
+      "description": "robustmargin.MonotonicityCheck: a data-only adjacent-level monotonicity check on raw counts (decisions/0023 \"Amendment 1\") -- populated on every fit_dose_response return path, whatever the Status, since it needs only counts, never a fitted curve. An untagged helper, like BaselineRate: it appears only as Fit.monotonicity.",
+      "properties": {
+        "direction": {
+          "enum": [
+            "decreasing",
+            "increasing"
+          ]
+        },
+        "alpha": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "dependence": {
+          "enum": [
+            "independent"
+          ]
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdjacentPair"
+          }
+        },
+        "any_flagged": {
+          "type": "boolean"
+        },
+        "method": {
+          "type": "string",
+          "const": "fisher_exact_one_sided_holm"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "direction",
+        "alpha",
+        "dependence",
+        "pairs",
+        "any_flagged"
       ],
       "additionalProperties": false
     }

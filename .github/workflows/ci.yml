@@ -1,4 +1,4 @@
-# marginkit CI. ROADMAP section 2's "no CI-as-a-service" non-goal forbids *building* a CI
+# robustmargin CI. ROADMAP section 2's "no CI-as-a-service" non-goal forbids *building* a CI
 # service; using GitHub Actions is what zeta-bench already does.
 name: ci
 

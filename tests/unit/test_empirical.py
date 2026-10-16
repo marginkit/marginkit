@@ -1,4 +1,4 @@
-"""Unit tests for ``marginkit.empirical.grid_break_point``.
+"""Unit tests for ``robustmargin.empirical.grid_break_point``.
 
 The first test class, ``TestPortedFromZetaBench``, ports ``TestBreakPoint`` from
 ``../zeta-bench/tests/test_cards.py`` (lines 91-106), which exercises
@@ -9,7 +9,7 @@ case reuses the literal curve values from ``test_cards.py::_synthetic_rows``'s `
 (lines 56-60) rather than re-deriving ``degradation_curve``'s pooling, since that pooling
 itself is not part of the ported API.
 
-Everything after ``TestPortedFromZetaBench`` is new to marginkit: the deliberate divergences
+Everything after ``TestPortedFromZetaBench`` is new to robustmargin: the deliberate divergences
 from zeta-bench (``ValueError`` instead of a silent ``(None, None)``, keyword-only ``criterion``,
 a frozen result, built-in ``float`` fields) and the real-data regression over
 ``tests/data/zeta_matrix_counts.csv``.
@@ -26,7 +26,7 @@ from typing import Any, Callable, cast
 import numpy as np
 import pytest
 
-from marginkit import Censoring, GridBreakPoint, grid_break_point
+from robustmargin import Censoring, GridBreakPoint, grid_break_point
 
 _DATA_CSV = Path(__file__).resolve().parents[1] / "data" / "zeta_matrix_counts.csv"
 
@@ -73,7 +73,7 @@ class TestPortedFromZetaBench:
     def test_empty_input_raises(self) -> None:
         """Diverges from zeta-bench's ``break_point([], gate=...) == (None, None)``.
 
-        marginkit has no silent fallback (CLAUDE.md hard constraint 3): empty input raises
+        robustmargin has no silent fallback (CLAUDE.md hard constraint 3): empty input raises
         rather than returning a plausible-looking result.
         """
         with pytest.raises(ValueError):
@@ -189,7 +189,7 @@ class TestStrictInequalityAndTypes:
         ``0.949999988079071`` once cast to float64, which is strictly below a float64
         ``criterion=0.95``. zeta-bench's numpy would instead narrow the Python-float criterion
         down to float32 before comparing, where the two are equal and the level passes. This
-        test asserts marginkit's float64 behaviour is deliberate, not a bug to fix.
+        test asserts robustmargin's float64 behaviour is deliberate, not a bug to fix.
         """
         severity = [0.0, 5.0]
         performance = np.array([1.0, 0.95], dtype=np.float32)
@@ -290,14 +290,12 @@ class TestProvenanceAndSchemaVersion:
         )
 
     def test_default_schema_version_is_the_current_package_version(self) -> None:
-        """``decisions/0022`` bumped the single, package-wide ``SCHEMA_VERSION`` to ``"2"`` (for
-        ``Ratio``'s new ``HALF_OPEN`` shape); ``decisions/0023`` has since bumped it again, to
-        ``"3"`` (``Fit.diagnostics``) -- ``GridBreakPoint``'s own default tracks the same
-        constant, since ``report.py`` versions the whole card format, not each type
-        independently. This test name no longer hardcodes which version that is."""
+        """``GridBreakPoint``'s default tracks the single, package-wide ``SCHEMA_VERSION``
+        (``"4"`` as of ``decisions/0027``), since ``report.py`` versions the whole card format,
+        not each type independently. This test name does not hardcode which version that is."""
         result = grid_break_point([0.0, 5.0, 10.0], [1.0, 0.95, 0.4], criterion=0.95)
 
-        assert result.schema_version == "3"
+        assert result.schema_version == "4"
 
     def test_default_provenance_is_an_empty_mapping(self) -> None:
         import collections.abc
@@ -326,6 +324,6 @@ class TestProvenanceAndSchemaVersion:
         assert result.value == 0.1
         assert result.max_tested == 0.2
         assert result.censoring is Censoring.NONE
-        # decisions/0022, decisions/0023: package-wide SCHEMA_VERSION
-        assert result.schema_version == "3"
+        # decisions/0027: package-wide SCHEMA_VERSION
+        assert result.schema_version == "4"
         assert len(result.provenance) == 0

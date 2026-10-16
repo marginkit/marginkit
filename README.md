@@ -1,7 +1,7 @@
-# marginkit
+# robustmargin
 Robustness margins with confidence intervals, via dose-response threshold estimation. Model-agnostic — no GPU, no ML framework required
 
-> **Status: latest release `0.1.0`.** Binomial dose-response fits, thresholds with profile-likelihood or delta
+> **Status: latest release `0.1.1`.** Binomial dose-response fits, thresholds with profile-likelihood or delta
 > confidence intervals, censoring, ratios of two thresholds with Fieller or log-delta intervals,
 > fit diagnostics, and the grid break-point rule. Continuous outcomes, clustered and paired
 > inference, and design helpers are planned for `0.2`. While the version is below 1.0, a minor
@@ -10,24 +10,24 @@ Robustness margins with confidence intervals, via dose-response threshold estima
 ## What it does
 
 You test a system at increasing levels of some stress (the *severity*) and count successes at
-each level. marginkit fits a dose-response curve to those counts and reports the severity at
+each level. robustmargin fits a dose-response curve to those counts and reports the severity at
 which performance crosses a level you choose, with a confidence interval. When the data cannot
 support a number, it says so: a threshold beyond the tested range is censored and reported as a
 bound, and a failed fit carries a status flag and no estimate.
 
 ## Install
 
-Requires Python 3.11 or later. marginkit is not on PyPI yet, so install a release from its git
-tag:
+Requires Python 3.11 or later.
 
 ```bash
-pip install "marginkit @ git+https://github.com/marginkit/marginkit@v0.1.0"
+pip install robustmargin
 ```
 
-The `marginkit` name on PyPI is not published by this project yet. Until this README says
-otherwise, install from the tag above rather than with `pip install marginkit`.
-
 Runtime dependencies are `numpy`, `scipy`, and `statsmodels`, with loose minimum versions.
+
+robustmargin was developed under the name `marginkit` and renamed before its first PyPI release.
+This project does not publish the `marginkit` project on PyPI, so don't install it expecting this
+package.
 
 ## Worked example
 
@@ -36,7 +36,7 @@ affected in each group. The outcome here is survival, which decreases with dose.
 is an untreated control.
 
 ```python
-from marginkit import (
+from robustmargin import (
     Axis,
     Censoring,
     Definition,
@@ -87,7 +87,14 @@ achieves, and the upper asymptote is estimated rather than fixed at 1. The secon
 what the diagnostics are for.
 
 ```python
-from marginkit import Axis, Definition, Observations, fit_dose_response, ratio_interval, threshold
+from robustmargin import (
+    Axis,
+    Definition,
+    Observations,
+    fit_dose_response,
+    ratio_interval,
+    threshold,
+)
 
 conc = [0.0, 100.0, 200.0, 300.0, 400.0, 500.0]
 curves = {
@@ -145,7 +152,7 @@ interpolated, and it has no confidence interval.
 
 
 ```python
-from marginkit import Censoring, grid_break_point
+from robustmargin import Censoring, grid_break_point
 
 severity = [0.0, 0.5, 1.0, 2.0, 4.0]
 performance = [1.0, 0.98, 0.96, 0.91, 0.40]  # e.g. success rate at each level
@@ -160,7 +167,7 @@ When no tested level fails, there is no value. The result is right-censored and 
 testing went, so it reads as "held up to 2.0", never as "cannot fail":
 
 ```python
-from marginkit import Censoring, grid_break_point
+from robustmargin import Censoring, grid_break_point
 
 held = grid_break_point([0.0, 1.0, 2.0], [1.0, 0.99, 0.97], criterion=0.95)
 assert held.value is None
@@ -172,7 +179,7 @@ On a signed axis, pass `signed=True`. The rule then breaks on magnitude, on whic
 first:
 
 ```python
-from marginkit import grid_break_point
+from robustmargin import grid_break_point
 
 signed = grid_break_point(
     [-0.2, -0.1, 0.0, 0.1, 0.2],
@@ -194,20 +201,20 @@ Some points about the rule:
 ## Results and JSON
 
 Every result is a frozen dataclass carrying a `schema_version` and a `provenance` mapping.
-`provenance` records where the inputs came from; marginkit stores it and never interprets it.
+`provenance` records where the inputs came from; robustmargin stores it and never interprets it.
 
 - `GridBreakPoint` is what `grid_break_point` returns.
 - `Fit`, `Threshold` and `Ratio` are what `fit_dose_response`, `threshold` and `ratio_interval`
   return. They check their own consistency when constructed. For example, a failed fit cannot
   carry parameters, and a censored threshold cannot carry a point estimate.
 
-Results are collected in a `Scorecard` and written to JSON with `marginkit.report`:
+Results are collected in a `Scorecard` and written to JSON with `robustmargin.report`:
 
 ```python
 import json
 
-from marginkit import Scorecard, grid_break_point
-from marginkit.report import from_dict, load_schema, to_dict
+from robustmargin import Scorecard, grid_break_point
+from robustmargin.report import from_dict, load_schema, to_dict
 
 held = grid_break_point([0.0, 1.0, 2.0], [1.0, 0.99, 0.97], criterion=0.95)
 card = Scorecard(results=(held,), provenance={"run": "example"})
@@ -217,21 +224,24 @@ assert from_dict(json.loads(text)) == card
 assert load_schema()["$schema"] == "https://json-schema.org/draft/2020-12/schema"
 ```
 
-The JSON follows `schema/scorecard-v3.json`, a JSON Schema shipped inside the package. It
-covers binary outcomes only, and reading is strict: a card with fields this marginkit does not
-know is rejected, not silently trimmed. To read a stored card, use a marginkit at least as new as
-the one that wrote it. Cards written by earlier versions (schema 1 and 2) still load.
+The JSON follows `schema/scorecard-v4.json`, a JSON Schema shipped inside the package. It
+covers binary outcomes only, and reading is strict: a card with fields this version does not know
+is rejected, not silently trimmed. To read a stored card, use a robustmargin at least as new as the
+one that wrote it. The card's `library_version` field records which version that was. Cards
+written under the package's earlier name, `marginkit` (schema 1 to 3), are not read: loading one
+raises `ValueError`.
 
-For your own tests, `marginkit.testing` provides `fake_fit`, `fake_threshold` and `fake_ratio`.
+For your own tests, `robustmargin.testing` provides `fake_fit`, `fake_threshold` and `fake_ratio`.
 They return schema-valid results in every status and censoring state, and each is labelled as a
 fake rather than an estimate.
 
 ## Provenance
 
-marginkit's break-point and censoring conventions come from
+robustmargin's break-point and censoring conventions come from
 [zeta-bench](https://github.com/badkoubeh/zeta-bench) (`robustness/cards.py::break_point`). Its
-dose-response estimation is new. See [`docs/PROVENANCE.md`](https://github.com/marginkit/marginkit/blob/main/docs/PROVENANCE.md) for what was
-carried over and what deliberately differs.
+dose-response estimation is new. See
+[`docs/PROVENANCE.md`](https://github.com/robustmargin/robustmargin/blob/main/docs/PROVENANCE.md)
+for what was carried over and what deliberately differs.
 
 ## Development
 
@@ -244,8 +254,8 @@ pytest            # enforces 90% branch coverage
 
 CI runs the tests on Python 3.11, 3.12, and 3.13 against current dependencies. It also runs them
 on Python 3.11 against the oldest supported versions, pinned in `ci/constraints-min.txt`.
-Changes are recorded in [`CHANGELOG.md`](https://github.com/marginkit/marginkit/blob/main/CHANGELOG.md).
+Changes are recorded in [`CHANGELOG.md`](https://github.com/robustmargin/robustmargin/blob/main/CHANGELOG.md).
 
 ## License
 
-Apache-2.0. See [`LICENSE`](https://github.com/marginkit/marginkit/blob/main/LICENSE).
+Apache-2.0. See [`LICENSE`](https://github.com/robustmargin/robustmargin/blob/main/LICENSE).

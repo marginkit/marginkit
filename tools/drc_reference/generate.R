@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# marginkit's R `drc` reference fixtures (plan sections 6.1-6.2, Phase 4 plan).
+# robustmargin's R `drc` reference fixtures (plan sections 6.1-6.2, Phase 4 plan).
 #
 # Writes JSON files under tools/drc_reference/ that Phase 4-6 tests read. Tests never run R
 # themselves (hard constraint 1: R is a local tool only, never an importable dependency); this
@@ -7,7 +7,7 @@
 # tools/drc_reference/README.md.
 #
 # Every JSON file records the R, drc and MASS versions actually used, plus (where relevant) the
-# drc -> marginkit parameter mapping this run empirically confirmed:
+# drc -> robustmargin parameter mapping this run empirically confirmed:
 #   mu = log(e); s is +-1/b depending on which response was fit and which direction it moves in
 #   (see the "mapping" block written into each file -- section 5.1's "check drc's sign
 #   convention" turned into a recorded fact, not a comment).
@@ -23,7 +23,7 @@ suppressPackageStartupMessages({
 
 out_dir <- "tools/drc_reference"
 if (!dir.exists(out_dir)) {
-  stop("expected to be run from the marginkit repo root (tools/drc_reference not found)")
+  stop("expected to be run from the robustmargin repo root (tools/drc_reference not found)")
 }
 
 versions <- list(
@@ -78,8 +78,8 @@ full_binomial_loglik <- function(successes_or_failures, n, p) {
 
 data(finney71)
 # str(finney71): 'data.frame': 6 obs. of 3 variables: dose (num), total (int), affected (int).
-# affected/total plays the role of FAILURE (marginkit's F models failure probability rising
-# with dose; see the docstring in src/marginkit/models.py). Includes an exact dose = 0 row
+# affected/total plays the role of FAILURE (robustmargin's F models failure probability rising
+# with dose; see the docstring in src/robustmargin/models.py). Includes an exact dose = 0 row
 # (0/49 affected), an all-success control on the log axis.
 stopifnot(identical(names(finney71), c("dose", "total", "affected")))
 stopifnot(any(finney71$dose == 0))
@@ -88,7 +88,7 @@ m_ln <- drm(affected / total ~ dose, weights = total, data = finney71, fct = LN.
 m_ll <- drm(affected / total ~ dose, weights = total, data = finney71, fct = LL.2(), type = "binomial")
 
 # glm equivalents, fit on the dose > 0 subset only: log(0) is undefined, and this mirrors
-# marginkit's own rule (section 5.1) of dropping an all-success zero-severity control from the
+# robustmargin's own rule (section 5.1) of dropping an all-success zero-severity control from the
 # likelihood when both asymptotes are fixed at 1/0. The zero-dose row is kept out of `fdat` for
 # every glm fit below, and the parity check further down confirms this changes nothing, because
 # a 0-failure row's log-likelihood contribution is exactly zero (lchoose(n, 0) + n*log(1) = 0).
@@ -108,7 +108,7 @@ fit_glm <- function(link) {
     # coef/logLik above. df_residual is 3 (fdat, the dose>0 subset, has 5 rows; 2 estimated
     # parameters; 5-2=3) -- fdat never contains the dose=0 row at all (it was subsetted out above
     # because log(0) is undefined, not because glm() drops it itself), which is what makes this
-    # comparable to marginkit's own diagnose(), whose *own* exclusion of the dose=0 control is
+    # comparable to robustmargin's own diagnose(), whose *own* exclusion of the dose=0 control is
     # structural (decisions/0023 Amendment 2, item 1: a log-axis severity-0 cell under a fixed
     # upper=1.0), not a coincidence of the two happening to remove the same row.
     deviance = as.numeric(deviance(g)),
@@ -188,7 +188,7 @@ loglik_parity <- list(
   note = paste(
     "drc's logLik() is the FULL binomial log-likelihood, including the binomial coefficient",
     "(confirmed by matching a manual lchoose-based computation on drc's own fitted values).",
-    "Dropping the all-success dose=0 control row from the GLM likelihood (marginkit section",
+    "Dropping the all-success dose=0 control row from the GLM likelihood (robustmargin section",
     "5.1's rule for the fixed u=1,l=0 path) changes the log-likelihood by exactly 0, because",
     "an n_successes=0-failure row's binomial log-likelihood term (lchoose(n,0) + n*log(1)) is",
     "identically 0 -- this is a mathematical identity, not a coincidence of this dataset."
@@ -220,15 +220,15 @@ finney71_fixture <- list(
   df_comparison_note = list(
     drc_df_residual = as.numeric(nrow(finney71) - length(coef(m_ln))),
     glm_df_residual = as.numeric(nrow(fdat) - length(coef(g_probit_obj))),
-    marginkit_diagnose_df = as.numeric(nrow(fdat) - length(coef(g_probit_obj))),
+    robustmargin_diagnose_df = as.numeric(nrow(fdat) - length(coef(g_probit_obj))),
     note = paste(
       "decisions/0023 Amendment 2's factual correction: drc's drm() fits the FULL 6-row",
       "finney71 (LN.2/LL.2 handle dose=0 directly on the log scale), so drc's own residual df",
-      "is 4 (6 rows - 2 parameters). glm() here and marginkit's diagnose() both report df=3",
+      "is 4 (6 rows - 2 parameters). glm() here and robustmargin's diagnose() both report df=3",
       "(5 rows - 2 parameters), but for two DIFFERENT reasons that happen to agree on this",
       "dataset: this script subsets the dose=0 row out of fdat before ever calling glm(),",
       "because log(0) is undefined and would make the glm() call itself fail -- glm() does not",
-      "'drop' the row on its own. marginkit's diagnose(), by contrast, fits all 6 rows and then",
+      "'drop' the row on its own. robustmargin's diagnose(), by contrast, fits all 6 rows and then",
       "excludes the dose=0 cell from its own deviance/Pearson/df computation STRUCTURALLY (a",
       "log-axis severity-0 cell under a fixed upper=1.0), never because a computed probability",
       "happens to round to exactly 1.0 (the pre-Amendment-2 bug, C1). drc's df=4 is not directly",
@@ -270,7 +270,7 @@ finney71_fixture <- list(
       "used log(dose) as the covariate, dose.p's 'Dose' output is actually on the log(dose)",
       "scale already -- it is mu directly (== -b0/b1), NOT exp(mu). This is a definitional",
       "fact about dose.p's implementation (it applies no inverse transform for a transformed",
-      "covariate), not a marginkit convention, and is why this value is compared to mu, never",
+      "covariate), not a robustmargin convention, and is why this value is compared to mu, never",
       "to exp(mu) or to drc's e."
     )
   )
@@ -366,8 +366,8 @@ write_fixture(selenium_fixture, "selenium_edcomp.json")
 
 # =================================================================================================
 # 4. Estimated asymptotes: a seeded simulated binomial dataset (true u=0.9, l=0.1, probit),
-#    fit with drc's binomial LN.3 (d estimated, c fixed at 0 -- marginkit's
-#    upper="estimate", lower=0.0 path) and LN.4 (c and d both estimated -- marginkit's
+#    fit with drc's binomial LN.3 (d estimated, c fixed at 0 -- robustmargin's
+#    upper="estimate", lower=0.0 path) and LN.4 (c and d both estimated -- robustmargin's
 #    upper="estimate", lower="estimate" path). The raw simulated data is embedded so Python
 #    tests never need to re-derive it or run R themselves.
 # =================================================================================================
@@ -388,21 +388,21 @@ sim_successes <- rbinom(length(sim_severity), sim_trials, sim_p_success)
 
 sim_df <- data.frame(severity = sim_severity, successes = sim_successes, trials = sim_trials)
 
-# LN.3: c (lower limit) fixed at 0 by drc's own default -- this is marginkit's
+# LN.3: c (lower limit) fixed at 0 by drc's own default -- this is robustmargin's
 # upper="estimate", lower=0.0 path, deliberately fit against data whose TRUE lower asymptote
-# is 0.1, not 0: this fixture is a numerical-parity check of marginkit's likelihood/optimizer
+# is 0.1, not 0: this fixture is a numerical-parity check of robustmargin's likelihood/optimizer
 # under a caller-chosen fixed lower asymptote, not a recovery-of-truth check (that is
 # tests/unit/test_models_recovery.py, in Python, with both asymptotes estimated).
 m_ln3 <- drm(successes / trials ~ severity, weights = trials, data = sim_df, fct = LN.3(), type = "binomial")
-# LN.4: both c and d estimated -- marginkit's upper="estimate", lower="estimate" path.
+# LN.4: both c and d estimated -- robustmargin's upper="estimate", lower="estimate" path.
 m_ln4 <- drm(successes / trials ~ severity, weights = trials, data = sim_df, fct = LN.4(), type = "binomial")
 
 # Tight refits: drm()'s default convergence tolerance (drmc()'s relTol=1e-7) leaves both LN.3
-# and LN.4 under-converged on this dataset -- marginkit's GenericLikelihoodModel path (bfgs then
+# and LN.4 under-converged on this dataset -- robustmargin's GenericLikelihoodModel path (bfgs then
 # a newton polish, run to a much tighter tolerance) reaches a strictly higher log-likelihood than
 # drc's default fit above. Refitting from the default fit's own coefficients with a much tighter
 # tolerance closes almost all of that gap (see the logLik comparison this script prints below),
-# confirming the default fit was under-converged rather than marginkit being wrong. The default
+# confirming the default fit was under-converged rather than robustmargin being wrong. The default
 # fits are kept in the JSON for the record, but the *tight* fits are what the Python parity
 # tests read.
 m_ln3_tight <- drm(
@@ -426,13 +426,13 @@ cat(sprintf(
 
 tight_convergence_note <- paste(
   "drm()'s default control (drmc(): relTol=1e-7, maxIt=500) leaves this fit under-converged --",
-  "marginkit's GenericLikelihoodModel path (bfgs then a newton polish, run to a much tighter",
+  "robustmargin's GenericLikelihoodModel path (bfgs then a newton polish, run to a much tighter",
   "tolerance) reaches a strictly higher log-likelihood than the 'default' block below. Refitting",
   "from the default fit's own coefficients with control=drmc(relTol=1e-14, maxIt=10000,",
   "method='BFGS') (the 'tight' block) closes almost all of that gap and is what the Python",
   "parity tests compare against; 'default' is kept only for the record. This is why",
   "TestEstimatedAsymptoteParity in tests/reference/test_models_drc.py compares logLik with",
-  "marginkit_logLik >= tight_logLik - 1e-6 rather than the usual two-sided 1e-4 relative bound,",
+  "robustmargin_logLik >= tight_logLik - 1e-6 rather than the usual two-sided 1e-4 relative bound,",
   "and why mu uses an absolute tolerance (its true value is 0, where a relative tolerance is",
   "ill-posed) while s/upper/lower use a looser 1e-3 relative tolerance -- the tight refit is",
   "itself only converged to about that precision, not to plan section 6.1's usual 1e-4."
@@ -441,7 +441,7 @@ tight_convergence_note <- paste(
 # Sign convention (empirically confirmed against predict(), not assumed -- see scratch
 # verification): unlike finney71, this fit is on SUCCESSES/total, a DEcreasing curve (from u at
 # severity=0 down to l at high severity). For both LN.3 and LN.4, b comes out negative, and
-# mu=log(e), s=-1/b, upper=d, lower=c reproduces predict() exactly via marginkit's own formula
+# mu=log(e), s=-1/b, upper=d, lower=c reproduces predict() exactly via robustmargin's own formula
 # P_success(x) = u - (u-l)*Phi((log(x)-mu)/s) with u=d, l=c substituted in directly (matching
 # the plan's "lower=c, upper=d" mapping literally, with no 1-minus flip needed, because the
 # response fit here is success, not failure).
@@ -515,7 +515,7 @@ write_fixture(estimated_fixture, "estimated_asymptotes.json")
 # =================================================================================================
 # 5. decisions/0023 Amendment 1: the zeta PPO x sensor_noise monotonicity reversal's raw one-sided
 #    Fisher exact p-value, from R directly -- 57/200 at severity 0.0 vs 143/300 at severity 0.01
-#    (tests/data/zeta_matrix_counts.csv). marginkit's own check_monotonicity() tests this same
+#    (tests/data/zeta_matrix_counts.csv). robustmargin's own check_monotonicity() tests this same
 #    pair against scipy's fisher_exact (tests/unit/test_monotonicity.py) and, once this fixture is
 #    regenerated, against this R-native number too (tests/reference/test_monotonicity_drc.py).
 # =================================================================================================
@@ -523,7 +523,7 @@ write_fixture(estimated_fixture, "estimated_asymptotes.json")
 ppo_severity_0 <- c(successes = 57, trials = 200)
 ppo_severity_0_01 <- c(successes = 143, trials = 300)
 
-# marginkit's own table/alternative convention (decisions/0023 Amendment 1, item 4): for
+# robustmargin's own table/alternative convention (decisions/0023 Amendment 1, item 4): for
 # direction="decreasing" with a success outcome, [[successes_high, failures_high],
 # [successes_low, failures_low]], alternative="greater" -- "the higher severity performs better".
 ppo_table <- matrix(
@@ -549,7 +549,7 @@ ppo_monotonicity_fixture <- list(
   ),
   fisher_test = list(
     alternative = "greater",
-    table_convention = "matrix(c(successes_high, failures_high, successes_low, failures_low), nrow=2, byrow=TRUE) -- marginkit's own convention, decisions/0023 Amendment 1 item 4",
+    table_convention = "matrix(c(successes_high, failures_high, successes_low, failures_low), nrow=2, byrow=TRUE) -- robustmargin's own convention, decisions/0023 Amendment 1 item 4",
     p_value = as.numeric(ppo_fisher$p.value),
     estimate_odds_ratio = as.numeric(ppo_fisher$estimate)
   )

@@ -24,7 +24,7 @@ import math
 
 import pytest
 
-from marginkit import Axis, Fit, Observations, Status, fit_dose_response
+from robustmargin import Axis, Fit, Observations, Status, fit_dose_response
 
 _LINEAR_AXIS = Axis(name="severity", unit="unit", scale="linear")
 _LOG_AXIS = Axis(name="severity", unit="unit", scale="log")

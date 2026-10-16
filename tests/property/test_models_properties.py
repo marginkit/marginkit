@@ -38,7 +38,7 @@ import pytest
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
-from marginkit import Axis, Fit, Observations, Status, fit_dose_response
+from robustmargin import Axis, Fit, Observations, Status, fit_dose_response
 
 _MAX_EXAMPLES = 25
 _AXIS = Axis(name="severity", unit="unit", scale="log")

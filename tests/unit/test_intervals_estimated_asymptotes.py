@@ -1,5 +1,5 @@
 """Coverage-closing tests for the estimated-asymptote profile path in
-``marginkit.intervals``: ``_MuSubstitutedLogLikelihood``, ``_optimizer_start_from_fit``,
+``robustmargin.intervals``: ``_MuSubstitutedLogLikelihood``, ``_optimizer_start_from_fit``,
 ``_estimated_profile_llf`` and ``_profile_interval_estimated`` (plan section 5.4, this module's
 own docstring on why the offset trick does not apply once an asymptote moves).
 
@@ -45,7 +45,7 @@ from typing import Any
 import pytest
 from scipy.stats import norm
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Censoring,
     Definition,
@@ -101,7 +101,7 @@ def _simulation_observations() -> Observations:
 
 def _target_for(definition: Definition, *, upper: float, lower: float) -> float:
     """Plan section 5.3's target performance, reimplemented independently of
-    ``marginkit.intervals._target_for`` so :func:`_expected_value` checks the solve rather than
+    ``robustmargin.intervals._target_for`` so :func:`_expected_value` checks the solve rather than
     restating it."""
     if definition.kind == "absolute":
         return definition.value
@@ -112,7 +112,7 @@ def _target_for(definition: Definition, *, upper: float, lower: float) -> float:
 
 def _expected_value(fit: Fit, definition: Definition) -> float:
     """``exp(mu + s * z*)`` recomputed directly from ``fit.params`` (probit only, this fixture's
-    link), independently of ``marginkit.intervals.solve_value``."""
+    link), independently of ``robustmargin.intervals.solve_value``."""
     assert fit.params is not None
     mu = fit.params["mu"].value
     s = fit.params["s"].value

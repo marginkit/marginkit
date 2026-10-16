@@ -26,7 +26,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Censoring,
@@ -117,7 +117,7 @@ def _ok_fit() -> Fit:
 
 
 # Round 2: which Fit.status a Threshold's own default fit should carry, mirroring
-# marginkit.testing._FIT_STATUS_FOR_THRESHOLD_STATUS. UNREACHABLE and FAILS_AT_BASELINE are
+# robustmargin.testing._FIT_STATUS_FOR_THRESHOLD_STATUS. UNREACHABLE and FAILS_AT_BASELINE are
 # properties of a perfectly good fit (rule 1/3), so they map to OK; SEPARATION, NOT_CONVERGED
 # and CONTROL_INCOMPATIBLE are properties of the fit itself, so a threshold with one of those
 # statuses is built by default on a fit carrying the same status (rule 2). A test that wants to
@@ -186,7 +186,7 @@ def _ratio(
     # exactly 1.0 -- satisfying rule 12 (estimate must equal threshold_a.value /
     # threshold_b.value) for every existing call site that passes estimate=1.0 without
     # overriding threshold_a/threshold_b. Rule 16 (disjoint data between a ratio's two
-    # thresholds) is marginkit.testing.fake_ratio's concern, not this dataclass-level helper's;
+    # thresholds) is robustmargin.testing.fake_ratio's concern, not this dataclass-level helper's;
     # nothing here tests independence.
     #
     # The two default fits are built from different cells (_CELLS vs _CELLS_B), modelling
@@ -303,7 +303,7 @@ class TestCovariance:
 
 def _old_rule_accepts(matrix: np.ndarray) -> bool:
     """The ``0.1.0a2`` positive-definiteness rule, before the units-independence fix,
-    reimplemented here independently (not imported from ``marginkit.models``) as the oracle
+    reimplemented here independently (not imported from ``robustmargin.models``) as the oracle
     for ``TestCovarianceNewRuleAcceptsSupersetOfOldRule`` below: ``min eig(matrix) > 1e-12 *
     max(1, max|entry|)``, on the raw (non-correlation) matrix.
     """
@@ -315,7 +315,7 @@ def _old_rule_accepts(matrix: np.ndarray) -> bool:
 
 def _new_rule_accepts(matrix: np.ndarray) -> bool:
     """Whether the *current*, public rule accepts ``matrix``, decided the only way a test is
-    allowed to decide it: by actually constructing a :class:`~marginkit.Covariance` and seeing
+    allowed to decide it: by actually constructing a :class:`~robustmargin.Covariance` and seeing
     whether it raises. This never reimplements or imports ``models._is_positive_definite``
     itself, so the property test below exercises the real public behaviour, not a second copy
     of it.
@@ -482,11 +482,10 @@ class TestFitDefaults:
         fit = _ok_fit()
 
         assert fit.warnings == ()
-        # decisions/0022 bumped the single package-wide SCHEMA_VERSION to "2" (for HALF_OPEN);
-        # decisions/0023 has since bumped it again, to "3" (Fit.diagnostics) -- Fit's own default
+        # decisions/0027: one package-wide SCHEMA_VERSION, currently "4" -- Fit's own default
         # tracks the same constant, since report.py versions the whole card format, not each type
         # independently.
-        assert fit.schema_version == "3"
+        assert fit.schema_version == "4"
         assert fit.provenance == {}
 
 
@@ -1337,9 +1336,9 @@ class TestThresholdDefaultsAndFrozen:
         threshold = _threshold(value=0.05, lo=0.03, hi=0.08, interval_method="profile")
 
         assert threshold.warnings == ()
-        # decisions/0022 and decisions/0023: see TestFitDefaults's own comment -- one
-        # package-wide SCHEMA_VERSION, currently "3".
-        assert threshold.schema_version == "3"
+        # decisions/0027: see TestFitDefaults's own comment -- one package-wide SCHEMA_VERSION,
+        # currently "4".
+        assert threshold.schema_version == "4"
         assert threshold.provenance == {}
 
     def test_is_frozen(self) -> None:
@@ -1620,7 +1619,7 @@ class TestThresholdDependence:
 
 class TestThresholdHasNoNPerLevelField:
     """Item 6, round 3: ``n_per_level`` is removed. Per-level n is read from
-    ``threshold.fit.cells`` instead (each :class:`~marginkit.Cell` already carries its own
+    ``threshold.fit.cells`` instead (each :class:`~robustmargin.Cell` already carries its own
     ``trials``), so a second, separately-populated copy is no longer part of the contract."""
 
     def test_n_per_level_is_not_a_field(self) -> None:
@@ -2332,9 +2331,8 @@ class TestRatioDefaultsAndFrozen:
         ratio = _ratio(estimate=1.0, lo=0.5, hi=2.0, shape=IntervalShape.BOUNDED)
 
         assert ratio.warnings == ()
-        # decisions/0022 bumped SCHEMA_VERSION to "2", for HALF_OPEN; decisions/0023 has since
-        # bumped it again, to "3".
-        assert ratio.schema_version == "3"
+        # decisions/0027: the package-wide SCHEMA_VERSION, currently "4".
+        assert ratio.schema_version == "4"
         assert ratio.provenance == {}
 
     def test_is_frozen(self) -> None:

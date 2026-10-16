@@ -19,7 +19,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from marginkit import Axis, Observations, Status, fit_dose_response
+from robustmargin import Axis, Observations, Status, fit_dose_response
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[2] / "tools" / "drc_reference" / "estimated_asymptotes.json"

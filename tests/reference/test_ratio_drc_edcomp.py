@@ -5,19 +5,19 @@
 The fixture fits drc's ``LL.2`` (2-parameter log-logistic, fixed asymptotes ``c=0, d=1`` on the
 *affected* scale) with ``curveid = type`` across four selenium toxicity curves, then runs
 ``EDcomp(m, c(50, 50), interval = "fieller")`` and ``interval = "delta"`` on every pair -- six
-pairs of ED50 ratios in total. This file rebuilds the same four curves as marginkit
-:class:`~marginkit.Fit`/:class:`~marginkit.Threshold` objects (success-oriented, fixed
+pairs of ED50 ratios in total. This file rebuilds the same four curves as robustmargin
+:class:`~robustmargin.Fit`/:class:`~robustmargin.Threshold` objects (success-oriented, fixed
 ``upper=1.0, lower=0.0``, ``absolute(0.5)``) and compares ``ratio_interval()`` against both
 tables.
 
 **A data-compatibility note this file works around, not silently.** Every one of the four
 curves' ``conc=0`` control rows has nonzero deaths (2-3%). ``fit_dose_response`` -- and
-:class:`~marginkit.Fit` itself, independent of the fitting routine -- both refuse to build a
+:class:`~robustmargin.Fit` itself, independent of the fitting routine -- both refuse to build a
 ``upper=1.0``-fixed fit against a failing control on a log axis (plan section 5.1,
 ``Status.CONTROL_INCOMPATIBLE``): the fixed asymptote says the likelihood of any control failure
-is exactly zero, and marginkit's hard constraint against silent fallbacks (``CLAUDE.md``, item 3)
+is exactly zero, and robustmargin's hard constraint against silent fallbacks (``CLAUDE.md``, item 3)
 means it raises rather than clipping the offending probability away from zero the way drc's own
-fit evidently tolerates. This file therefore fits marginkit's model on the non-zero-dose rows
+fit evidently tolerates. This file therefore fits robustmargin's model on the non-zero-dose rows
 only for every curve -- the same set of rows drc's own ``LL.2`` GLM equivalent uses as covariate
 data (dropping the always-``z*=0``-at-``dose=0`` control row from the fitted regression is
 exactly what ``models.py``'s own fixed-asymptote GLM path already does for a *compatible*
@@ -34,10 +34,10 @@ absorbed into a tolerance (plan section 6.1):**
    one of the six pairs' ``Lower``/``Upper`` bounds reproduces exactly (to floating-point
    precision) from the classic Fieller quadratic (``docs/STATISTICS.md``) using ``qt(0.975, df=17)``
    in place of ``qnorm(0.975)`` -- confirmed against drc's own reported ``e``/``vcov`` entries
-   directly, independent of anything marginkit computes (this file's
+   directly, independent of anything robustmargin computes (this file's
    ``test_reconstructed_fieller_matches_drc_with_drcs_own_t_quantile``). ``df=17`` is
    ``25 - 8``: 25 total observations across the four curves, 8 free parameters (``b``, ``e`` per
-   curve). marginkit's whole interval framework is asymptotic-normal (``chi2``/``norm`` only --
+   curve). robustmargin's whole interval framework is asymptotic-normal (``chi2``/``norm`` only --
    confirmed by inspection, there is no ``t``-distribution or degrees-of-freedom concept
    anywhere in ``Fit``/``Threshold``/``Ratio``), so ``ratio_interval(method="fieller")`` cannot
    reproduce this even in principle. The point **estimate** (the ratio itself) does not depend
@@ -46,12 +46,13 @@ absorbed into a tolerance (plan section 6.1):**
    this difference ever silently disappearing (which would mean a t-quantile had been added, or
    drc's own default had changed, either of which is worth knowing about).
 2. **``EDcomp(..., interval="delta")`` is a plain Wald interval on the ratio's own original
-   (linear) scale, ``Estimate +/- qnorm(0.975) * SE``, not marginkit's log-scale-then-exponentiate
-   construction.** This is the same "drc computes delta intervals on the original scale rather
-   than the log scale" mismatch ``tests/reference/test_threshold_drc_ed.py`` already documents
-   for a single threshold's ``ED``, now confirmed for ``EDcomp`` too (normal quantile this time,
-   not ``t`` -- the two ``EDcomp`` interval types use different quantiles from each other, which
-   is itself worth recording precisely because it looks like it should not be true).
+   (linear) scale, ``Estimate +/- qnorm(0.975) * SE``, not robustmargin's
+   log-scale-then-exponentiate construction.** This is the same "drc computes delta intervals
+   on the original scale rather than the log scale" mismatch
+   ``tests/reference/test_threshold_drc_ed.py`` already documents for a single threshold's
+   ``ED``, now confirmed for ``EDcomp`` too (normal quantile this time, not ``t`` -- the two
+   ``EDcomp`` interval types use different quantiles from each other, which is itself worth
+   recording precisely because it looks like it should not be true).
 """
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ import pytest
 from scipy.stats import norm
 from scipy.stats import t as student_t
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Definition,
     IntervalShape,
@@ -146,7 +147,7 @@ def _drc_coef() -> dict[str, float]:
 
 def _drc_var_e(curve_type: int) -> float:
     """``Var(e:i)`` straight from drc's own ``vcov``, used only for the independent
-    ``t``-quantile reconstruction check, never for the marginkit-facing assertions."""
+    ``t``-quantile reconstruction check, never for the robustmargin-facing assertions."""
     fixture = _load("selenium_edcomp.json")
     vcov = fixture["model"]["vcov"]
     i = vcov["row_names"].index(f"e:{curve_type}")
@@ -171,16 +172,16 @@ def _fieller_quadratic(
 
 
 class TestSeleniumFitMatchesDrcCoefficients:
-    """Licenses every other comparison in this file: fitting marginkit's model on the non-zero
+    """Licenses every other comparison in this file: fitting robustmargin's model on the non-zero
     dose rows alone reproduces drc's own ``LL.2`` ``(b, e)`` (module docstring).
 
     ``mu = log(e)``, ``s = -1/b``: derived directly from ``LL.2``'s documented closed form,
     ``F_dead(x) = 1 / (1 + exp(b*(log(x) - log(e))))``, the same sign convention
     ``tools/drc_reference/README.md`` already confirms for ``finney71``'s ``LL.2`` fit (also a
     failure-increasing-with-dose orientation) -- not assumed by re-use, but re-derivable from the
-    formula: marginkit's success-scale ``F(z) = sigma(z)`` at ``z = (log(x)-mu)/s`` must equal
+    formula: robustmargin's success-scale ``F(z) = sigma(z)`` at ``z = (log(x)-mu)/s`` must equal
     drc's own ``F_dead(x)`` (since ``P_success = 1 - F_dead`` and ``upper=1, lower=0`` fixed makes
-    marginkit's ``P_success = 1 - F(z)`` too), which forces ``z = -b*(log(x)-log(e))``, i.e.
+    robustmargin's ``P_success = 1 - F(z)`` too), which forces ``z = -b*(log(x)-log(e))``, i.e.
     ``s = -1/b``, ``mu = log(e)``.
     """
 
@@ -254,7 +255,7 @@ class TestEdcompFiellerParity:
         self, a: int, b: int
     ) -> None:
         """Independent check (mismatch 1, module docstring): using drc's *own* ``Var(e:i))``
-        (not anything marginkit computed) and ``qt(0.975, df=17)`` in the classic Fieller
+        (not anything robustmargin computed) and ``qt(0.975, df=17)`` in the classic Fieller
         quadratic reproduces drc's ``Lower``/``Upper`` columns exactly. This isolates the
         quantile choice as the entire explanation for the mismatch above -- the underlying
         Fieller algebra is not in question.
@@ -305,7 +306,7 @@ class TestEdcompDeltaParity:
     @pytest.mark.parametrize(("a", "b"), _PAIRS)
     def test_reconstructed_se_matches_drcs_own_original_scale_se(self, a: int, b: int) -> None:
         """Mirrors ``test_threshold_drc_ed.py``'s ``_reconstructed_original_scale_se``: invert
-        marginkit's log-scale-then-exponentiate construction to recover its own log-scale ratio
+        robustmargin's log-scale-then-exponentiate construction to recover its own log-scale ratio
         standard error, propagate it onto the original (ratio) scale via
         ``se_original = estimate * sigma_log`` (the same delta-method identity this whole file's
         docstring cites), and compare to drc's own original-scale SE, recovered from

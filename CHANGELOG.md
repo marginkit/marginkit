@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to marginkit are recorded here. The format follows
+All notable changes to robustmargin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html). While the version is below 1.0 a
 minor bump may contain breaking changes; `docs/decisions/0003-consumer-version-policy.md` is
@@ -9,9 +9,66 @@ what consumers pin against.
 Every entry that adds, renames, removes, or changes the behaviour of a public symbol must also
 satisfy the public-API change checklist in `docs/IMPLEMENTATION_PLAN.md` Appendix B.
 
-## [Unreleased]
+## [0.1.1] -- unreleased
+
+The first release under the name `robustmargin`, and the first on PyPI (`decisions/0027`). It
+contains everything prepared for marginkit 0.1.1, the fixes listed under Fixed, and the rename and
+schema change below. `0.1.1rc1` is a TestPyPI-only dry run of the release pipeline (build, Trusted
+Publishing upload, install check); pre-release tags never reach PyPI.
+
+The version continues the repository's tag history, because the tag `v0.1.0` is marginkit 0.1.0
+and stays where it is. That is why a breaking release has a patch number: no version range can
+span two distribution names, so the new name is what announces the break.
+
+**This release is breaking for every user of marginkit 0.1.0.** No statistical method changed and
+no reported number moved.
+
+### Renamed
+- The distribution and the import package are now `robustmargin`, and `marginkit` is gone. There is
+  no compatibility alias and no deprecation period, because nothing was ever published on PyPI
+  under the old name. The `marginkit` project on PyPI belongs to another account and is not this
+  package.
+- Every public module path follows: `robustmargin.report`, `robustmargin.testing`, and so on.
+  Exported names, the warning tokens (`NON_MONOTONE: `, `NON_MONOTONE_DATA: `, `OVERDISPERSED: `,
+  `SPARSE_CELLS: `), exception types and raise conditions are unchanged.
+- The repository is `github.com/robustmargin/robustmargin`; `[project.urls]` and the README's
+  links point there.
+
+### Changed -- score-card schema "4"
+- `schema_version` is `"4"` on every result type. The packaged schema is `schema/scorecard-v4.json`,
+  with `$id` `urn:robustmargin:schema:scorecard-v4`.
+- `Scorecard.marginkit_version` is renamed `library_version`, in Python and in JSON. Structurally,
+  schema 4 is schema 3 with this rename. The `$id` and `title` changed and the descriptions were
+  reworded, but no validation keyword changed.
+- Only schema 4 is read. `from_dict` raises `ValueError` on any card or result whose
+  `schema_version` is `"1"`, `"2"` or `"3"`, naming it as the marginkit format; it never reads one
+  partially. The schema 1–3 files are no longer shipped, so `load_schema("1")` to `load_schema("3")`
+  raise `FileNotFoundError`.
+- `Fit` no longer refuses `diagnostics` or `monotonicity` when constructed with `schema_version`
+  `"1"` or `"2"`. That check existed only for the v1/v2 reader, which is gone. This is a
+  loosening: nothing that constructed before fails now.
+
+### Migration from marginkit 0.1.0
+- Replace any `marginkit @ git+...` requirement with `robustmargin>=0.1,<0.2`, and pin the exact
+  version in your lockfile.
+- Replace `import marginkit` and `from marginkit... import` with `robustmargin`.
+- Replace `marginkit_version` with `library_version` wherever you construct or read a `Scorecard`.
+- Cards stored under schema 1 to 3 cannot be read. Regenerate them from their input data. To
+  detect an old card before reading it, check its `schema_version`. The `ValueError` message is
+  prose, not a token to match on.
+- Drop or update any explicit `schema_version` you pass to a result constructor. An object
+  built with `"1"`, `"2"` or `"3"` still serialises, but the result can't be read back.
 
 ### Changed
+- The README installs with `pip install robustmargin`. Its links to `docs/PROVENANCE.md`,
+  `CHANGELOG.md` and `LICENSE` are absolute, so they work on the PyPI project page, where relative
+  links break.
+- `[project.urls]` adds the source repository and the issue tracker, next to the homepage and
+  changelog links.
+- Releases are built and published by `.github/workflows/release.yml` through PyPI Trusted
+  Publishing: TestPyPI first, an install check, then PyPI after the owner's approval. A
+  pre-release tag stops after the TestPyPI install check. `tools/check_dist.py` holds the artifact
+  checks that CI and the release both run.
 - Warning and exception messages no longer cite internal design documents (decision records,
   plan sections, decision labels). Only the prose changed: the leading tokens `NON_MONOTONE: `,
   `NON_MONOTONE_DATA: `, `OVERDISPERSED: ` and `SPARSE_CELLS: ` are byte-identical, and every
@@ -33,26 +90,10 @@ satisfy the public-API change checklist in `docs/IMPLEMENTATION_PLAN.md` Appendi
   It previously raised an unexplained numpy error, or, when an asymptote was estimated, returned
   `NOT_CONVERGED`.
 
-## [0.1.1] -- unreleased
+# Released as marginkit
 
-`0.1.1rc1` is a TestPyPI-only dry run of the release pipeline (build, Trusted Publishing upload,
-install check); pre-release tags never reach PyPI. It carries the same content as 0.1.1.
-
-Packaging only, prepared as the first PyPI release (`decisions/0024`), to be tagged `v0.1.1` once publishing to PyPI is possible.
-No code, public API, schema or numeric change from 0.1.0; upgrading needs nothing.
-
-### Changed
-- The README's links to `docs/PROVENANCE.md`, `CHANGELOG.md` and `LICENSE` are absolute, so they
-  work on the PyPI project page, where relative links break. They point at the `marginkit`
-  GitHub organization, which now owns the repository.
-- Not yet on PyPI: the `marginkit` name there is held by another account, and a PEP 541 request
-  is pending (`decisions/0024` Amendment 1). Until it is granted, install from the git tag; the
-  README switches to `pip install marginkit` in the release that first reaches PyPI.
-- `[project.urls]` adds the source repository and the issue tracker, next to the existing
-  homepage and changelog links.
-- Releases are built and published by `.github/workflows/release.yml` through PyPI Trusted
-  Publishing: TestPyPI first, an install check, then PyPI after the owner's approval.
-  `tools/check_dist.py` holds the artifact checks that CI and the release both run.
+The entries below were written while the package was named `marginkit`, and are kept as written.
+marginkit's planned 0.1.1 was never released; robustmargin 0.1.1 above carries its content.
 
 ## [0.1.0] — 2026-09-29
 

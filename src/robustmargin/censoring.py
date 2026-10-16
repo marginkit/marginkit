@@ -1,9 +1,9 @@
 """Censoring classification (plan section 5.5) and exact one-sided bounds (`decisions/0009`).
 
 Public: :func:`exact_one_sided_bound`, the one piece of numeric machinery every rule in this
-module (and :func:`marginkit.empirical.per_cell_clopper_pearson`) is built from -- the exact
+module (and :func:`robustmargin.empirical.per_cell_clopper_pearson`) is built from -- the exact
 arithmetic lives in exactly one place, here. Internal: :func:`classify`, which turns a
-:class:`~marginkit.Fit` plus an already-resolved target performance into a
+:class:`~robustmargin.Fit` plus an already-resolved target performance into a
 :class:`Classification` describing which of plan section 5.5's outcomes applies.
 
 Classification order (plan section 5.5's table is a list of conditions, not a sequence; this is
@@ -38,9 +38,9 @@ from typing import Literal
 
 from scipy.stats import binomtest
 
-from marginkit.empirical import BaselineRate, GridBreakPoint, grid_break_point
-from marginkit.models import Fit
-from marginkit.types import Cell, Censoring, Status, _check_finite_number
+from robustmargin.empirical import BaselineRate, GridBreakPoint, grid_break_point
+from robustmargin.models import Fit
+from robustmargin.types import Cell, Censoring, Status, _check_finite_number
 
 __all__ = ["Classification", "classify", "exact_one_sided_bound"]
 
@@ -61,7 +61,7 @@ def exact_one_sided_bound(
     ``confidence_level = c`` it puts ``(1 - c) / 2`` in each tail, so each endpoint is itself a
     one-sided bound at confidence ``(1 + c) / 2``. To get a one-sided bound at confidence
     ``level``, this passes ``confidence_level = 2 * level - 1`` and reads the requested side.
-    This is the *only* place in marginkit this conversion is written down; every other exact
+    This is the *only* place in robustmargin this conversion is written down; every other exact
     bound in the package (per-cell rates, the censoring rules below) calls this function rather
     than repeating it.
 
@@ -108,17 +108,17 @@ def exact_one_sided_bound(
 
 @dataclass(frozen=True, kw_only=True)
 class Classification:
-    """The outcome of :func:`classify`: everything :func:`marginkit.threshold` needs to build a
-    :class:`~marginkit.Threshold`, other than the solved ``value`` itself (which, when
+    """The outcome of :func:`classify`: everything :func:`robustmargin.threshold` needs to build a
+    :class:`~robustmargin.Threshold`, other than the solved ``value`` itself (which, when
     ``solve`` is ``True``, is the caller's job -- computed from ``fit.params`` directly, then
     refined by the requested interval method).
 
     Attributes
     ----------
     status
-        The :class:`~marginkit.Status` the resulting threshold should report.
+        The :class:`~robustmargin.Status` the resulting threshold should report.
     censoring
-        The :class:`~marginkit.Censoring` the resulting threshold should report. ``NONE`` unless
+        The :class:`~robustmargin.Censoring` the resulting threshold should report. ``NONE`` unless
         ``RIGHT``/``LEFT`` fired.
     lo, hi
         Severity-scale exact bounds, when this classification determined one directly (``RIGHT``,
@@ -545,11 +545,11 @@ def classify(fit: Fit, *, target: float, level: float) -> Classification:
     Parameters
     ----------
     fit
-        The :class:`~marginkit.Fit` to classify. Its ``cells`` (sorted ascending by
-        :meth:`~marginkit.Observations.cells`) are what every exact test here is run against.
+        The :class:`~robustmargin.Fit` to classify. Its ``cells`` (sorted ascending by
+        :meth:`~robustmargin.Observations.cells`) are what every exact test here is run against.
     target
         The already-resolved target performance ``P*`` (plan section 5.3). Resolving it from a
-        :class:`~marginkit.Definition` -- including which ``u`` a failed-fit fallback uses
+        :class:`~robustmargin.Definition` -- including which ``u`` a failed-fit fallback uses
         (`decisions/0008`) -- is the caller's job.
     level
         The confidence level, strictly between 0 and 1.

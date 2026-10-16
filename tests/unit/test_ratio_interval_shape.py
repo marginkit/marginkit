@@ -44,7 +44,7 @@ on hand-built inputs, which is the smallest thing that can be tested through the
 unreachable through any real ``Threshold`` (``B = theta_a*theta_b == 0`` forces
 ``theta_a == 0``, which in turn forces ``K = -z^2*Va <= 0``, so ``K > 0`` can never coincide with
 it for a genuine, non-negative delta-method variance) while ``dependence="independent"`` fixes
-``C = 0``; that one test calls ``marginkit.ratio``'s private ``_fieller_shape`` directly, with a
+``C = 0``; that one test calls ``robustmargin.ratio``'s private ``_fieller_shape`` directly, with a
 deliberately-impossible negative ``va``, and says so rather than pretending a public-API route
 exists.
 
@@ -79,7 +79,7 @@ import math
 import pytest
 from scipy.stats import norm
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Censoring,
@@ -94,8 +94,8 @@ from marginkit import (
     ratio_interval,
     threshold,
 )
-from marginkit.models import Covariance, Parameter
-from marginkit.ratio import _fieller_shape
+from robustmargin.models import Covariance, Parameter
+from robustmargin.ratio import _fieller_shape
 
 _AXIS = Axis(name="severity", unit="unit", scale="log")
 _LEVEL = 0.95
@@ -162,7 +162,7 @@ def _expected_fieller(
     *, theta_a: float, va: float, theta_b: float, vb: float, z: float
 ) -> tuple[IntervalShape, float | None, float | None]:
     """The classic Fieller quadratic (module docstring), solved independently of
-    ``ratio_interval()`` -- this file's own reference computation, not a call into marginkit.
+    ``ratio_interval()`` -- this file's own reference computation, not a call into robustmargin.
     """
     a_coef = theta_b**2 - z**2 * vb
     b_coef = theta_a * theta_b
@@ -741,8 +741,8 @@ class TestEmptyConfidenceSetRaises:
     raises ``ValueError`` naming the empty set, rather than reporting a shape at all.
 
     **Unreachable through the public API in v0.1**, confirmed by the module docstring's argument,
-    not merely asserted: this test calls ``marginkit.ratio``'s private ``_fieller_shape`` directly
-    with ``theta_a=0.0`` and a deliberately-impossible **negative** ``va`` -- no real
+    not merely asserted: this test calls ``robustmargin.ratio``'s private ``_fieller_shape``
+    directly with ``theta_a=0.0`` and a deliberately-impossible **negative** ``va`` -- no real
     delta-method variance is ever negative, and a genuine non-negative ``va`` with
     ``theta_a == 0`` forces ``K = -z^2*va <= 0``, never ``> 0``. ``v0.2``'s ``dependence="paired"``
     (nonzero covariance ``C``) can reach ``B == 0`` without ``theta_a == 0``, and that path may

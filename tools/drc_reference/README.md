@@ -3,7 +3,7 @@
 `generate.R` fits the reference models in R's `drc` package (plus a few `glm`/`MASS` checks)
 and writes the results as JSON under this directory. **Tests read only the JSON.** Running the
 test suite never needs R installed (hard constraint 1: R is a local tool only, never an
-importable dependency of marginkit itself).
+importable dependency of robustmargin itself).
 
 ## Regenerating the fixtures
 
@@ -36,7 +36,7 @@ MASS 7.3.65, jsonlite 2.0.0.
 
 `write_json(..., digits = NA)` is used throughout, so every number is written at full `double`
 precision rather than jsonlite's default rounding -- the plan's `1e-4`/`1e-3` tolerances
-(section 6.1) are relative tolerances a *test* applies when comparing to marginkit's own
+(section 6.1) are relative tolerances a *test* applies when comparing to robustmargin's own
 output; the fixture itself should never be the source of the imprecision.
 
 ## Files this script writes
@@ -54,7 +54,7 @@ output; the fixture itself should never be the source of the imprecision.
 Confirmed in `finney71.json`'s `loglik_parity` block by recomputing the log-likelihood by hand
 from drc's own fitted probabilities (with `lchoose`) and matching drc's `logLik()` value. This
 also means dropping an all-success zero-severity control row from a GLM's likelihood (as
-marginkit's fixed `upper=1, lower=0` path does, plan section 5.1) is an exact no-op on the
+robustmargin's fixed `upper=1, lower=0` path does, plan section 5.1) is an exact no-op on the
 log-likelihood: `finney71.json` shows the `glm` probit log-likelihood on the dose>0 subset
 matching drc's `LN.2` log-likelihood on the full 6-row dataset (including the dose=0 control)
 to the precision both optimizers converge to. The reason is a mathematical identity, not a
@@ -72,8 +72,8 @@ fixture's `mapping` block records the sign actually found, confirmed empirically
   data, so this is not a modelling choice -- it is what each `fct`'s internal parametrisation
   happens to produce, and it differs between them.
 - `estimated_asymptotes.json`: fit on `successes/trials` directly (**decreasing** with
-  severity, matching marginkit's own `upper`/`lower` as success-rate asymptotes with no
-  `1 - x` flip needed -- see the "Mapping into marginkit" note in the Phase 4 plan: `lower = c`,
+  severity, matching robustmargin's own `upper`/`lower` as success-rate asymptotes with no
+  `1 - x` flip needed -- see the "Mapping into robustmargin" note in the Phase 4 plan: `lower = c`,
   `upper = d`). For both `LN.3` and `LN.4`, `s = -1/b` (`b` comes out negative). The `mapping`
   block's `formula_check` note records that `P_success(x) = u - (u-l)*Phi((log(x)-mu)/s)` with
   `u = d`, `l = c` substituted in was checked against `predict()` at five held-out severities
@@ -93,7 +93,7 @@ a test compares it to `mu`, never to `exp(mu)` or to drc's `e`.
 **`estimated_asymptotes.json`'s `LN.3` fit is deliberately model-misspecified relative to the
 simulation truth.** drc's `LN.3` fixes the lower limit `c` at exactly `0`, while the simulated
 data's true lower asymptote is `0.1`. This is intentional: `LN.3` is the numerical-parity
-reference for marginkit's `upper="estimate", lower=0.0` call (a caller-chosen fixed lower
+reference for robustmargin's `upper="estimate", lower=0.0` call (a caller-chosen fixed lower
 asymptote that happens not to match the truth), not a recovery-of-truth check. The
 recovery-of-truth check lives in `tests/unit/test_models_recovery.py`, in Python, with both
 asymptotes estimated (matching drc's `LN.4`, fixture also included here).
@@ -106,9 +106,9 @@ as an infeasibility finding for this fixture.
 **`LN.3` and `LN.4`'s *default* fits are under-converged, so each carries a second, `"tight"`
 refit, and only the tight one is a reference value.** `drm()`'s default control
 (`drmc()`: `relTol=1e-7`, `maxIt=500`) stops short of the actual maximum on this dataset:
-marginkit's `GenericLikelihoodModel` path (`bfgs` then a `newton` polish, run to a much tighter
+robustmargin's `GenericLikelihoodModel` path (`bfgs` then a `newton` polish, run to a much tighter
 tolerance) reaches a strictly *higher* log-likelihood than drc's default fit. This is not
-marginkit outperforming drc's method -- it is drc's default stopping early. Refitting from the
+robustmargin outperforming drc's method -- it is drc's default stopping early. Refitting from the
 default fit's own coefficients (`start = coef(<default fit>)`) with
 `control = drmc(relTol = 1e-14, maxIt = 10000, method = "BFGS")` closes almost all of that gap
 (see the `LN.3`/`LN.4 logLik: default=... tight=...` lines `generate.R` prints when it runs).
@@ -120,7 +120,7 @@ reads only `"tight"`.**
 Because even the tight refit has not converged to plan section 6.1's usual 1e-4 relative
 precision (it has converged to roughly 1e-3, judging by how far it moved from the default fit),
 `TestEstimatedAsymptoteParity` does not use section 6.1's ordinary bounds for this one class:
-log-likelihood is checked as `marginkit_logLik >= tight_logLik - 1e-6` (an inequality: marginkit
+log-likelihood is checked as `robustmargin_logLik >= tight_logLik - 1e-6` (an inequality: robustmargin
 is expected to do at least as well, not exactly as well, since it is the more tightly converged
 of the two), `mu` uses an **absolute** tolerance of `1e-4` (its true simulated value is exactly
 `0`, where a relative tolerance is ill-posed), and `s`/`upper`/`lower` use a relative `1e-3`
