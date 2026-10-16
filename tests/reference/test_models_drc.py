@@ -18,7 +18,7 @@ consistency check between the GLM path and the likelihood path
 ``1e-4``.
 
 A failing test here is a reference-value drift: the fixed-asymptote GLM path this exercises is
-the one part of Phase 4 with an independent, non-marginkit implementation to check against. Per
+the one part of Phase 4 with an independent, non-robustmargin implementation to check against. Per
 ``CLAUDE.md``, that failure is a finding, never resolved by loosening the tolerance or adjusting
 the expected value.
 """
@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from marginkit import Axis, Observations, Status, fit_dose_response
+from robustmargin import Axis, Observations, Status, fit_dose_response
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tools" / "drc_reference"
 _REL_TOL_PARAMS = 1e-4
@@ -45,7 +45,7 @@ _REL_TOL_PARAMS = 1e-4
 _REL_TOL_COV = 1e-3
 # The internal consistency check between the GLM path and the GenericLikelihoodModel path (on
 # the same data, with the likelihood path's asymptotes pinned a hair inside (0, 1)) has no such
-# excuse -- both sides are marginkit's own computation of the same quantity -- and is held at
+# excuse -- both sides are robustmargin's own computation of the same quantity -- and is held at
 # the ordinary 1e-4 (decisions/0007's amendment).
 _REL_TOL_PATH_CONSISTENCY = 1e-4
 
@@ -65,8 +65,8 @@ def _finney71_observations(axis_scale: str = "log") -> Observations:
     dose = fixture["dataset"]["dose"]
     total = fixture["dataset"]["total"]
     affected = fixture["dataset"]["affected"]
-    # marginkit tracks SUCCESS; finney71's "affected" plays the role of failure (fixture note,
-    # and the Phase 4 plan's "Mapping into marginkit" section), so successes = total - affected.
+    # robustmargin tracks SUCCESS; finney71's "affected" plays the role of failure (fixture note,
+    # and the Phase 4 plan's "Mapping into robustmargin" section), so successes = total - affected.
     successes = [t - a for t, a in zip(total, affected, strict=True)]
     axis = Axis(name="dose", unit="unit", scale=axis_scale)
     return Observations.from_counts(
@@ -265,7 +265,7 @@ class TestGlmPathMatchesLikelihoodPathNearBoundary:
     ``(0, 1)`` (``upper=1-1e-7, lower=1e-7`` -- not exactly ``1.0``/``0.0``, so this takes
     the ``GenericLikelihoodModel`` path, and pinned close enough to the boundary that the two
     curves are, for this purpose, the same curve) should report the same ``(mu, s)``
-    covariance, since both sides are marginkit's own computation of the same quantity. Held at
+    covariance, since both sides are robustmargin's own computation of the same quantity. Held at
     the full ``1e-4`` relative (decisions/0007's amendment), not a looser path-consistency
     allowance: this checks internal agreement, not parity against drc, so there is no excuse
     for a wider tolerance. Do not widen this if it fails; report the actual gap instead.
@@ -298,7 +298,7 @@ class TestGlmPathMatchesLikelihoodPathNearBoundary:
 
 
 class TestEstimatedAsymptoteParity:
-    """The seeded simulated dataset in ``estimated_asymptotes.json``, fit with marginkit's
+    """The seeded simulated dataset in ``estimated_asymptotes.json``, fit with robustmargin's
     ``GenericLikelihoodModel`` path (D7 / ``decisions/0004``) and compared to drc's binomial
     ``LN.3`` (``upper="estimate", lower=0.0``) and ``LN.4`` (``upper="estimate",
     lower="estimate"``).
@@ -308,14 +308,14 @@ class TestEstimatedAsymptoteParity:
     *default* fit (``drmc()``'s ``relTol=1e-7``) is under-converged on this dataset: refitting
     from the default fit's own coefficients with ``drmc(relTol=1e-14, maxIt=10000,
     method="BFGS")`` (the fixture's ``"tight"`` block, which is what this class reads --
-    never ``"default"``) raises drc's own log-likelihood further, and marginkit's
+    never ``"default"``) raises drc's own log-likelihood further, and robustmargin's
     ``GenericLikelihoodModel`` path reaches a log-likelihood at or above even that tight
     refit's. Comparing coefficients at 1e-4 relative against an optimizer that has not itself
     converged to that precision would be comparing against noise, not against a reference
     value, so:
 
-    - (a) log-likelihood is checked as an inequality, ``marginkit >= drc_tight - 1e-6``, not an
-      equality band -- marginkit is expected to do at least as well as drc's tight refit;
+    - (a) log-likelihood is checked as an inequality, ``robustmargin >= drc_tight - 1e-6``, not an
+      equality band -- robustmargin is expected to do at least as well as drc's tight refit;
     - (b) ``mu`` is compared with an **absolute** tolerance of ``1e-4``, because the simulation's
       true ``mu`` is exactly ``0``, where a relative tolerance is ill-posed (dividing by ~0);
     - (c) ``s``, ``upper`` and ``lower`` are compared at a **relative 1e-3**, one order looser

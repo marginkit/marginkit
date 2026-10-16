@@ -1,9 +1,9 @@
-"""Property tests for ``marginkit.types.Observations`` (hypothesis).
+"""Property tests for ``robustmargin.types.Observations`` (hypothesis).
 
 Two invariants from plan section 6.4: aggregated and disaggregated inputs give the same fit
 (here, the same ``.cells()``, since Phase 3 has no fit yet) -- R1 -- and permuting rows changes
 nothing. A third property exercises the fakes' round-trip through ``report.to_dict`` /
-``from_dict`` across the combinations ``marginkit.testing`` produces, complementing the
+``from_dict`` across the combinations ``robustmargin.testing`` produces, complementing the
 exhaustive parametrised check in ``tests/unit/test_testing.py`` with hypothesis's own example
 generation and shrinking.
 """
@@ -15,9 +15,9 @@ from collections.abc import Callable
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from marginkit import Axis, Censoring, IntervalShape, Observations, Status
-from marginkit.report import from_dict, to_dict
-from marginkit.testing import fake_fit, fake_ratio, fake_threshold
+from robustmargin import Axis, Censoring, IntervalShape, Observations, Status
+from robustmargin.report import from_dict, to_dict
+from robustmargin.testing import fake_fit, fake_ratio, fake_threshold
 
 _MAX_EXAMPLES = 100
 _AXIS = Axis(name="noise", unit="m", scale="log")

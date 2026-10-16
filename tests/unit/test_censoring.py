@@ -1,4 +1,4 @@
-"""``marginkit.censoring``: the exact one-sided bound arithmetic (decisions/0009) and per-cell
+"""``robustmargin.censoring``: the exact one-sided bound arithmetic (decisions/0009) and per-cell
 exact rates (plan section 5.4, ROADMAP section 3.1).
 
 ``exact_one_sided_bound`` is the module's one piece of numeric machinery: everything in
@@ -6,12 +6,13 @@ exact rates (plan section 5.4, ROADMAP section 3.1).
 arithmetic against the plan's own closed forms is what keeps every downstream RIGHT/LEFT/bracket
 test meaningful.
 
-``marginkit.censoring`` and ``ExactRates``/``per_cell_clopper_pearson`` (``marginkit.empirical``)
-do not exist yet (this file is written before Phase 5's implementation, per plan section 6). Each
-name is imported **inside** the test that needs it, not at module level, matching the convention
-``tests/contract/`` already uses for not-yet-existing Phase 5 names: a module-level
-``ModuleNotFoundError``/``ImportError`` would abort collection of this *entire file* (and, by
-default, the whole ``pytest`` run), whereas a local import only fails the one test that uses it.
+``robustmargin.censoring`` and ``ExactRates``/``per_cell_clopper_pearson``
+(``robustmargin.empirical``) do not exist yet (this file is written before Phase 5's
+implementation, per plan section 6). Each name is imported **inside** the test that needs it,
+not at module level, matching the convention ``tests/contract/`` already uses for
+not-yet-existing Phase 5 names: a module-level ``ModuleNotFoundError``/``ImportError`` would
+abort collection of this *entire file* (and, by default, the whole ``pytest`` run), whereas a
+local import only fails the one test that uses it.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import math
 import pytest
 from scipy.stats import binomtest
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Censoring,
@@ -32,9 +33,9 @@ from marginkit import (
     fit_dose_response,
     threshold,
 )
-from marginkit.censoring import exact_one_sided_bound
-from marginkit.report import to_dict
-from marginkit.testing import fake_fit
+from robustmargin.censoring import exact_one_sided_bound
+from robustmargin.report import to_dict
+from robustmargin.testing import fake_fit
 
 
 class TestExactOneSidedBound:
@@ -44,7 +45,7 @@ class TestExactOneSidedBound:
     """
 
     def test_500_of_500_lower_bound_at_95_matches_the_closed_form(self) -> None:
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         expected = 0.05 ** (1.0 / 500.0)
         result = exact_one_sided_bound(500, 500, level=0.95, side="lower")
@@ -52,7 +53,7 @@ class TestExactOneSidedBound:
         assert result == pytest.approx(0.9940264484836504, rel=1e-12)
 
     def test_0_of_300_upper_bound_at_95_matches_the_closed_form(self) -> None:
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         expected = 1.0 - 0.05 ** (1.0 / 300.0)
         result = exact_one_sided_bound(0, 300, level=0.95, side="upper")
@@ -65,7 +66,7 @@ class TestExactOneSidedBound:
         yields a 97.5% bound where 95% was asked for. Pinned so a regression to it is caught,
         not merely a correct-by-luck coincidence.
         """
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         wrong = binomtest(500, 500).proportion_ci(confidence_level=0.95, method="exact").low
         correct = exact_one_sided_bound(500, 500, level=0.95, side="lower")
@@ -74,13 +75,13 @@ class TestExactOneSidedBound:
         assert correct == pytest.approx(0.05 ** (1.0 / 500.0), rel=1e-12)
 
     def test_upper_bound_is_at_least_the_observed_rate(self) -> None:
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         result = exact_one_sided_bound(150, 300, level=0.95, side="upper")
         assert result >= 0.5
 
     def test_lower_bound_is_at_most_the_observed_rate(self) -> None:
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         result = exact_one_sided_bound(150, 300, level=0.95, side="lower")
         assert result <= 0.5
@@ -89,14 +90,14 @@ class TestExactOneSidedBound:
         """Interval containment/monotonicity (plan section 6.4): a higher confidence level's
         one-sided bound must be at least as conservative (further from the observed rate).
         """
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         narrow = exact_one_sided_bound(150, 300, level=0.80, side="upper")
         wide = exact_one_sided_bound(150, 300, level=0.99, side="upper")
         assert wide >= narrow
 
     def test_side_must_be_lower_or_upper(self) -> None:
-        from marginkit.censoring import exact_one_sided_bound
+        from robustmargin.censoring import exact_one_sided_bound
 
         with pytest.raises(ValueError):
             exact_one_sided_bound(150, 300, level=0.95, side="both")  # type: ignore[arg-type]
@@ -109,7 +110,7 @@ class TestPerCellClopperPearson:
     """
 
     def test_returns_parallel_arrays_one_per_cell_with_the_documented_method(self) -> None:
-        from marginkit.empirical import ExactRates, per_cell_clopper_pearson
+        from robustmargin.empirical import ExactRates, per_cell_clopper_pearson
 
         cells = (
             Cell(severity=0.0, successes=200, trials=200),
@@ -128,7 +129,7 @@ class TestPerCellClopperPearson:
         assert len(rates.hi) == len(cells)
 
     def test_each_cells_rate_is_contained_in_its_own_exact_interval(self) -> None:
-        from marginkit.empirical import per_cell_clopper_pearson
+        from robustmargin.empirical import per_cell_clopper_pearson
 
         cells = (
             Cell(severity=0.0, successes=200, trials=200),
@@ -147,11 +148,11 @@ class TestPerCellClopperPearson:
         the lower end is ``0.025 ** (1/500)``, not the one-sided ``0.05 ** (1/500)``.
 
         The one-sided closed forms from plan section 5.5 are asserted against
-        :func:`~marginkit.censoring.exact_one_sided_bound`, above -- that function answers the
+        :func:`~robustmargin.censoring.exact_one_sided_bound`, above -- that function answers the
         one-sided question a censoring classification asks, and this one reports an interval.
         Keeping the two conventions apart is the whole point of having both.
         """
-        from marginkit.empirical import per_cell_clopper_pearson
+        from robustmargin.empirical import per_cell_clopper_pearson
 
         cells = (Cell(severity=10.0, successes=500, trials=500),)
 
@@ -166,8 +167,8 @@ class TestPerCellClopperPearson:
         """A regression guard for the convention itself: if someone re-wires
         ``per_cell_clopper_pearson`` back onto ``exact_one_sided_bound``, this fails.
         """
-        from marginkit.censoring import exact_one_sided_bound
-        from marginkit.empirical import per_cell_clopper_pearson
+        from robustmargin.censoring import exact_one_sided_bound
+        from robustmargin.empirical import per_cell_clopper_pearson
 
         cells = (Cell(severity=1.0, successes=98, trials=200),)
         rates = per_cell_clopper_pearson(cells, level=0.95)
@@ -182,7 +183,7 @@ class TestPerCellClopperPearson:
         """The documented call shape: ``per_cell_clopper_pearson(fit.cells, ...)``, not
         ``per_cell_clopper_pearson(fit, ...)``.
         """
-        from marginkit.empirical import per_cell_clopper_pearson
+        from robustmargin.empirical import per_cell_clopper_pearson
 
         fit = fake_fit()
 
@@ -191,7 +192,7 @@ class TestPerCellClopperPearson:
         assert rates.severity == tuple(c.severity for c in fit.cells)
 
     def test_default_level_is_0_95(self) -> None:
-        from marginkit.empirical import per_cell_clopper_pearson
+        from robustmargin.empirical import per_cell_clopper_pearson
 
         cells = (Cell(severity=0.0, successes=200, trials=200),)
 
@@ -207,7 +208,7 @@ def test_exact_rates_is_not_serialisable_through_report_to_dict() -> None:
     future change that makes ``ExactRates`` serialisable (and so makes it possible to smuggle a
     per-cell interval into a stored card next to a ``Threshold``) is caught.
     """
-    from marginkit.empirical import per_cell_clopper_pearson
+    from robustmargin.empirical import per_cell_clopper_pearson
 
     cells = (Cell(severity=0.0, successes=200, trials=200),)
     rates = per_cell_clopper_pearson(cells)

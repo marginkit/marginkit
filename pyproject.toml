@@ -1,4 +1,4 @@
-# marginkit packaging. Packaging is the deliverable (CLAUDE.md hard constraint 6), so this
+# robustmargin packaging. Packaging is the deliverable (CLAUDE.md hard constraint 6), so this
 # file is load-bearing from the first commit of source rather than something added later.
 
 [build-system]
@@ -9,13 +9,13 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "marginkit"
+name = "robustmargin"
 description = "Robustness margins with confidence intervals, via dose-response threshold estimation."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
-authors = [{ name = "marginkit contributors" }]
+authors = [{ name = "robustmargin contributors" }]
 dynamic = ["version"]
 
 # PyPI discovery facets. No `License ::` classifier: PEP 639 makes the SPDX `license` field
@@ -33,7 +33,7 @@ classifiers = [
 ]
 
 # Exactly the allowlist in CLAUDE.md hard constraint 1, and nothing else. Floors stay loose
-# and are tested at the floor in CI (plan R9) so marginkit never forces a numpy or scipy
+# and are tested at the floor in CI (plan R9) so robustmargin never forces a numpy or scipy
 # version onto a consumer's environment. `ci/constraints-min.txt` is the second copy of these
 # three numbers; if the two disagree, that is a finding.
 dependencies = [
@@ -56,23 +56,23 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/marginkit/marginkit"
-Source = "https://github.com/marginkit/marginkit"
-Changelog = "https://github.com/marginkit/marginkit/blob/main/CHANGELOG.md"
-Issues = "https://github.com/marginkit/marginkit/issues"
+Homepage = "https://github.com/robustmargin/robustmargin"
+Source = "https://github.com/robustmargin/robustmargin"
+Changelog = "https://github.com/robustmargin/robustmargin/blob/main/CHANGELOG.md"
+Issues = "https://github.com/robustmargin/robustmargin/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.dynamic]
-# The version literal lives in exactly one place: src/marginkit/__init__.py.
-version = { attr = "marginkit.__version__" }
+# The version literal lives in exactly one place: src/robustmargin/__init__.py.
+version = { attr = "robustmargin.__version__" }
 
 [tool.setuptools.package-data]
 # A missing py.typed fails silently and disables type checking for every consumer, which is
 # why CI asserts it is present inside the built wheel and not merely on disk. The score-card
-# schema is read at runtime by `marginkit.report.load_schema`, so the same check covers it.
-marginkit = ["py.typed", "schema/*.json"]
+# schema is read at runtime by `robustmargin.report.load_schema`, so the same check covers it.
+robustmargin = ["py.typed", "schema/*.json"]
 
 [tool.ruff]
 line-length = 100
@@ -115,7 +115,7 @@ addopts = [
     # matrix, which invokes a bare `pytest` -- stays fast, and so the 90% gate below measures
     # the fast suite. Run them with `pytest -m slow --no-cov`; a later `-m` overrides this one.
     "-m", "not slow",
-    "--cov=marginkit",
+    "--cov=robustmargin",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",

@@ -1,10 +1,10 @@
-"""Unit tests for ``marginkit.validation``'s **model-only** diagnostics:
-:class:`~marginkit.Diagnostics` and :func:`~marginkit.diagnose` (plan section 5.7,
+"""Unit tests for ``robustmargin.validation``'s **model-only** diagnostics:
+:class:`~robustmargin.Diagnostics` and :func:`~robustmargin.diagnose` (plan section 5.7,
 ``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``, as amended by that decision's
 "Amendment 1").
 
 Amendment 1 moves the adjacent-pair monotonicity check out of ``Diagnostics`` entirely and onto
-``Fit.monotonicity`` (a :class:`~marginkit.MonotonicityCheck`, populated on *every*
+``Fit.monotonicity`` (a :class:`~robustmargin.MonotonicityCheck`, populated on *every*
 ``fit_dose_response`` return path, whatever the ``Status``) -- because a check that needs only
 raw counts should not disappear when the curve fit fails. Those tests live in
 ``tests/unit/test_monotonicity.py`` now, not here. This file covers exactly what
@@ -12,7 +12,7 @@ raw counts should not disappear when the curve fit fails. Those tests live in
 require a converged fit and are still ``None`` for a non-``OK`` one.
 
 Written before the implementation exists (plan section 6, ``CLAUDE.md``'s working rhythm):
-every expected number here is computed *independently* of ``marginkit.validation`` -- directly
+every expected number here is computed *independently* of ``robustmargin.validation`` -- directly
 from the binomial deviance/Pearson/AIC formulas via ``scipy``, or by a from-scratch Holm
 step-down -- exactly the "unit test that computes the formulas directly" decisions/0023 itself
 promises for the estimated-asymptote path (which has no R ``glm`` equivalent). ``diagnose()`` is
@@ -78,7 +78,7 @@ import pytest
 from scipy.special import gammaln, xlogy
 from scipy.stats import norm
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Covariance,
@@ -98,7 +98,7 @@ _LINEAR_AXIS = Axis(name="severity", unit="unit", scale="linear")
 def _loglik(cells: tuple[Cell, ...], p: list[float]) -> float:
     """The full binomial log-likelihood at known per-cell success probabilities -- the same
     ``lchoose``-inclusive formula ``models.py`` uses, recomputed here from scratch so this file
-    never imports marginkit's own private helpers."""
+    never imports robustmargin's own private helpers."""
     total = 0.0
     for cell, p_i in zip(cells, p, strict=True):
         y = float(cell.successes)
@@ -1007,12 +1007,12 @@ class TestLinkComparison:
         """The alternative-link refit's own non-convergence is forced deterministically here
         (rather than found by search) by monkeypatching the fitting call
         ``validation.py``'s ``_refit_link`` uses for any non-fixed-asymptote spec --
-        ``marginkit.models._fit_generic`` -- so only the ``cloglog`` refit is intercepted and
+        ``robustmargin.models._fit_generic`` -- so only the ``cloglog`` refit is intercepted and
         every other call (including the ``fit_probit`` fit this test itself builds, and the real
         ``logit`` refit ``diagnose`` also performs) goes through unchanged. This tests the same
         ``_link_comparison`` code path as before, just without depending on an optimizer landing
         on the correct side of a tolerance."""
-        import marginkit.models as models_module
+        import robustmargin.models as models_module
 
         real_fit_generic = models_module._fit_generic
 

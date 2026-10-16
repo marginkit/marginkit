@@ -1,12 +1,11 @@
-"""Schema-valid fake results for **consumers' own tests** (plan section 3.3's "unblock
-marginbench early").
+"""Schema-valid fake results for **consumers' own tests**.
 
 ``fake_fit``, ``fake_threshold`` and ``fake_ratio`` build deterministic, schema-valid
-:class:`~marginkit.Fit`, :class:`~marginkit.Threshold` and :class:`~marginkit.Ratio` objects so
-a consumer can write and run its own report-rendering tests before marginkit's real statistics
-(Phases 4-6) exist. They are **not** statistical estimates of anything: every one of them
-carries a warning saying so, and nothing here should be read as a claim about what a real fit
-would produce for the same inputs.
+:class:`~robustmargin.Fit`, :class:`~robustmargin.Threshold` and :class:`~robustmargin.Ratio`
+objects so a consumer can write and run its own report-rendering and serialisation tests without
+fitting any data. They are **not** statistical estimates of anything: every one of them carries
+a warning saying so, and nothing here should be read as a claim about what a real fit would
+produce for the same inputs.
 """
 
 from __future__ import annotations
@@ -16,11 +15,11 @@ from collections.abc import Mapping
 
 from scipy.stats import binomtest
 
-from marginkit.empirical import BaselineRate, GridBreakPoint
-from marginkit.models import Covariance, Fit, Parameter
-from marginkit.ratio import Ratio
-from marginkit.threshold import Threshold
-from marginkit.types import (
+from robustmargin.empirical import BaselineRate, GridBreakPoint
+from robustmargin.models import Covariance, Fit, Parameter
+from robustmargin.ratio import Ratio
+from robustmargin.threshold import Threshold
+from robustmargin.types import (
     Axis,
     Cell,
     Censoring,
@@ -30,7 +29,7 @@ from marginkit.types import (
     Observations,
     Status,
 )
-from marginkit.validation import Diagnostics, MonotonicityCheck, check_monotonicity, diagnose
+from robustmargin.validation import Diagnostics, MonotonicityCheck, check_monotonicity, diagnose
 
 __all__ = ["fake_fit", "fake_ratio", "fake_threshold"]
 
@@ -49,8 +48,8 @@ _UNSET = _Unset()
 
 
 def _observations_from_cells(fit: Fit) -> Observations:
-    """Rebuild the :class:`~marginkit.Observations` a fake ``fit`` "came from", so
-    :func:`~marginkit.check_monotonicity` can run on it the same way it would on real data
+    """Rebuild the :class:`~robustmargin.Observations` a fake ``fit`` "came from", so
+    :func:`~robustmargin.check_monotonicity` can run on it the same way it would on real data
     (`decisions/0023` Amendment 2, item 4)."""
     return Observations.from_counts(
         fit.axis,
@@ -64,7 +63,7 @@ def _observations_from_cells(fit: Fit) -> Observations:
 
 _AXIS = Axis(name="severity", unit="unit", scale="log")
 _FAKE_WARNING = (
-    "This is a fake object from marginkit.testing, built for a consumer's own tests. It is "
+    "This is a fake object from robustmargin.testing, built for a consumer's own tests. It is "
     "schema-valid, not a statistical estimate."
 )
 _CELLS: tuple[Cell, ...] = (
@@ -173,31 +172,31 @@ def fake_fit(
     diagnostics: Diagnostics | None | _Unset = _UNSET,
     monotonicity: MonotonicityCheck | None | _Unset = _UNSET,
 ) -> Fit:
-    """Build a deterministic, schema-valid :class:`~marginkit.Fit`.
+    """Build a deterministic, schema-valid :class:`~robustmargin.Fit`.
 
     Parameters
     ----------
     status
-        The :class:`~marginkit.Status` to build. Every member other than ``UNREACHABLE`` and
+        The :class:`~robustmargin.Status` to build. Every member other than ``UNREACHABLE`` and
         ``FAILS_AT_BASELINE`` is accepted (those describe a threshold, not a fit, and
-        :class:`~marginkit.Fit` itself rejects them). When ``status`` is not ``OK``, ``params``,
+        :class:`~robustmargin.Fit` itself rejects them). When ``status`` is not ``OK``, ``params``,
         ``covariance`` and ``log_likelihood`` are all ``None``, matching
-        :class:`~marginkit.Fit`'s own invariant.
+        :class:`~robustmargin.Fit`'s own invariant.
     provenance
         Stored on the result as given, or ``{}`` if not provided.
     diagnostics
         Mirrors a real fit (`decisions/0023` Amendment 2, item 4): when omitted entirely, this is
-        :func:`~marginkit.diagnose` on the built fit when ``status`` is ``OK``, or ``None``
-        otherwise (:func:`~marginkit.diagnose` itself requires ``status is Status.OK``). Passing
+        :func:`~robustmargin.diagnose` on the built fit when ``status`` is ``OK``, or ``None``
+        otherwise (:func:`~robustmargin.diagnose` itself requires ``status is Status.OK``). Passing
         an explicit value -- ``None`` included -- always overrides that and is stored as given;
         ``Fit`` itself still rejects a non-``None`` value when ``status`` is not ``OK`` (hard
         constraint 3).
     monotonicity
         Mirrors a real fit, the same way ``diagnostics`` does: when omitted entirely, this is
-        :func:`~marginkit.check_monotonicity` on the built fit's own cells, for *every* ``status``
-        (a real :func:`~marginkit.fit_dose_response` result is never ``None`` here regardless of
-        status, `decisions/0023` "Amendment 1"). An explicit value -- ``None`` included -- always
-        overrides.
+        :func:`~robustmargin.check_monotonicity` on the built fit's own cells, for *every*
+        ``status`` (a real :func:`~robustmargin.fit_dose_response` result is never ``None`` here
+        regardless of status, `decisions/0023` "Amendment 1"). An explicit value -- ``None``
+        included -- always overrides.
 
     Returns
     -------
@@ -242,14 +241,14 @@ def fake_threshold(
     censoring: Censoring = Censoring.NONE,
     provenance: Mapping[str, JSONValue] | None = None,
 ) -> Threshold:
-    """Build a deterministic, schema-valid :class:`~marginkit.Threshold`.
+    """Build a deterministic, schema-valid :class:`~robustmargin.Threshold`.
 
     Parameters
     ----------
     status
-        The :class:`~marginkit.Status` to build.
+        The :class:`~robustmargin.Status` to build.
     censoring
-        The :class:`~marginkit.Censoring` to build.
+        The :class:`~robustmargin.Censoring` to build.
     provenance
         Stored on the result as given, or ``{}`` if not provided.
 
@@ -372,27 +371,27 @@ def fake_ratio(
     censoring: Censoring = Censoring.NONE,
     provenance: Mapping[str, JSONValue] | None = None,
 ) -> Ratio:
-    """Build a deterministic, schema-valid :class:`~marginkit.Ratio`.
+    """Build a deterministic, schema-valid :class:`~robustmargin.Ratio`.
 
     A failed or censored ratio carries no numbers (owner decision): whenever ``status`` is not
     ``OK`` or ``censoring`` is not ``NONE``, ``shape``, ``estimate``, ``lo`` and ``hi`` are all
-    ``None``, matching :class:`~marginkit.Ratio`'s own invariant.
+    ``None``, matching :class:`~robustmargin.Ratio`'s own invariant.
 
     Parameters
     ----------
     shape
-        The :class:`~marginkit.IntervalShape` to build. ``None`` (the default) means
+        The :class:`~robustmargin.IntervalShape` to build. ``None`` (the default) means
         ``BOUNDED`` when ``status`` is ``OK`` and ``censoring`` is ``NONE``, and means "no
         shape" (forced ``None``) otherwise. Passing an explicit shape together with a non-``OK``
         ``status`` or a non-``NONE`` ``censoring`` raises ``ValueError``, since that combination
         can never be a valid ``Ratio``. Every member is buildable, including
-        ``IntervalShape.EXCLUSIVE``, which a real :func:`~marginkit.ratio_interval` call cannot
+        ``IntervalShape.EXCLUSIVE``, which a real :func:`~robustmargin.ratio_interval` call cannot
         produce while ``dependence="independent"`` (`decisions/0022`) but whose
-        :class:`~marginkit.Ratio` invariants still need a consumer-testable fixture.
+        :class:`~robustmargin.Ratio` invariants still need a consumer-testable fixture.
     status
-        The :class:`~marginkit.Status` to build.
+        The :class:`~robustmargin.Status` to build.
     censoring
-        The :class:`~marginkit.Censoring` to build.
+        The :class:`~robustmargin.Censoring` to build.
     provenance
         Stored on the result as given, or ``{}`` if not provided.
 
@@ -403,7 +402,7 @@ def fake_ratio(
         ``dependence="independent"``, ``cluster_ids=None`` on both fits, and ``warnings``
         naming it a fake. On the ``OK`` + ``NONE`` path, ``estimate`` is exactly
         ``threshold_a.value / threshold_b.value``, matching
-        :class:`~marginkit.Ratio`'s own invariant; the point estimate always lies inside the
+        :class:`~robustmargin.Ratio`'s own invariant; the point estimate always lies inside the
         Fieller confidence set described by ``shape``, including for ``EXCLUSIVE``.
 
     Raises

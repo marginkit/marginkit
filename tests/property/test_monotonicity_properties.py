@@ -1,4 +1,4 @@
-"""Property tests for :func:`~marginkit.check_monotonicity`
+"""Property tests for :func:`~robustmargin.check_monotonicity`
 (``docs/decisions/0023-fit-diagnostics-and-schema-v3.md``'s "Amendment 1"; plan section 6.4).
 
 Two properties, mirroring ``tests/property/test_models_properties.py``'s own conventions:
@@ -14,7 +14,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from marginkit import Axis, Observations, check_monotonicity
+from robustmargin import Axis, Observations, check_monotonicity
 
 _MAX_EXAMPLES = 25
 _AXIS = Axis(name="severity", unit="unit", scale="log")

@@ -1,6 +1,6 @@
 """Robustness-margin estimation: thresholds with confidence intervals.
 
-marginkit's break-point and censoring **conventions** come from zeta-bench
+robustmargin's break-point and censoring **conventions** come from zeta-bench
 (``robustness/cards.py::break_point``). Its dose-response **estimation is new**. See
 ``docs/PROVENANCE.md``.
 
@@ -11,7 +11,7 @@ interval-shape enums (:class:`Status`, :class:`IntervalShape`, alongside the exi
 :class:`Scorecard`), the grid break-point rule (:func:`grid_break_point`, returning
 :class:`GridBreakPoint`), and the dose-response fitter (:func:`fit_dose_response`, returning a
 :class:`Fit` whose :meth:`~Fit.predict` returns a :class:`Prediction`). The JSON report module
-(``marginkit.report``) and the schema-valid test fakes (``marginkit.testing``) are importable
+(``robustmargin.report``) and the schema-valid test fakes (``robustmargin.testing``) are importable
 as submodules but are not re-exported here.
 
 As of ``0.1.0a3`` this release adds :func:`threshold`, which solves for the severity at which
@@ -30,23 +30,23 @@ adjacent-severity-level check that needs only raw counts, computed on every
 that decision's "Amendment 1"). Both are reported and never acted on automatically: neither
 changes a fitted parameter, a reported threshold, or which link a caller chose.
 
-Note that ``marginkit.threshold`` is now the *function*, not the submodule.
+Note that ``robustmargin.threshold`` is now the *function*, not the submodule.
 """
 
 from __future__ import annotations
 
-from marginkit.empirical import (
+from robustmargin.empirical import (
     BaselineRate,
     ExactRates,
     GridBreakPoint,
     grid_break_point,
     per_cell_clopper_pearson,
 )
-from marginkit.models import Covariance, Fit, Parameter, Prediction, fit_dose_response
-from marginkit.ratio import Ratio, ratio_interval
-from marginkit.report import Scorecard
-from marginkit.threshold import Threshold, threshold
-from marginkit.types import (
+from robustmargin.models import Covariance, Fit, Parameter, Prediction, fit_dose_response
+from robustmargin.ratio import Ratio, ratio_interval
+from robustmargin.report import Scorecard
+from robustmargin.threshold import Threshold, threshold
+from robustmargin.types import (
     Axis,
     Cell,
     Censoring,
@@ -55,7 +55,7 @@ from marginkit.types import (
     Observations,
     Status,
 )
-from marginkit.validation import (
+from robustmargin.validation import (
     AdjacentPair,
     Diagnostics,
     MonotonicityCheck,

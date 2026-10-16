@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Censoring,
     Definition,
@@ -346,7 +346,7 @@ class TestPpoMassSignedAxis:
     with an interior ``mu``.
 
     ``(Status.OK, Censoring.LEFT)`` is one of the fourteen ``(status, censoring)`` pairs the
-    frozen Phase 3 contract (``marginkit.testing.fake_threshold``'s
+    frozen Phase 3 contract (``robustmargin.testing.fake_threshold``'s
     ``_ALLOWED_THRESHOLD_COMBINATIONS``) already allows -- this is what makes it reachable at
     all, not a new invariant.
     """

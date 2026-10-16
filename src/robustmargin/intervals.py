@@ -3,7 +3,7 @@ primary method) and the delta method (the cross-check).
 
 Both operate on the transformed axis ``theta`` -- ``log(severity)`` on a log axis, raw severity
 on a linear axis -- and map back to the natural severity scale before returning, per
-:func:`marginkit.threshold.threshold`'s contract. :func:`solve_value` is the shared closed-form
+:func:`robustmargin.threshold.threshold`'s contract. :func:`solve_value` is the shared closed-form
 step (plan section 5.3): ``theta_hat = mu + s * z*``, where
 ``z* = F^-1((upper - target) / (upper - lower))``.
 
@@ -20,7 +20,7 @@ candidate ``(u, l)`` that makes ``P*`` unreachable, or an inner fit that fails o
 that side of the search rather than returning a number (hard constraint 3).
 
 Both ``ell_hat`` and ``ell_p(theta)`` are computed with
-``marginkit.models._full_binomial_log_likelihood`` at natural-scale parameters -- the inner GLM
+``robustmargin.models._full_binomial_log_likelihood`` at natural-scale parameters -- the inner GLM
 or ``GenericLikelihoodModel`` fit is used only as an optimiser for the *other* parameters at a
 fixed ``theta``, never trusted for the log-likelihood value itself, so the two numbers a root is
 found between are always computed the same way (GLM deviance, ``Fit.log_likelihood`` and the
@@ -54,14 +54,14 @@ from statsmodels.genmod import families
 from statsmodels.genmod.generalized_linear_model import GLM
 from statsmodels.tools.sm_exceptions import PerfectSeparationWarning
 
-from marginkit.models import (
+from robustmargin.models import (
     _STATSMODELS_LINKS,
     Fit,
     _cells_to_arrays,
     _full_binomial_log_likelihood,
     _transform,
 )
-from marginkit.types import Censoring, Definition, _check_finite_number
+from robustmargin.types import Censoring, Definition, _check_finite_number
 
 __all__ = ["IntervalResult", "delta_interval", "profile_interval", "solve_value"]
 
@@ -89,8 +89,8 @@ class IntervalResult:
         The interval's endpoints on the natural severity scale. ``None`` exactly on the side
         that ``censoring`` reports open.
     censoring
-        :data:`~marginkit.Censoring.NONE`, :data:`~marginkit.Censoring.OPEN_UPPER` or
-        :data:`~marginkit.Censoring.OPEN_LOWER`.
+        :data:`~robustmargin.Censoring.NONE`, :data:`~robustmargin.Censoring.OPEN_UPPER` or
+        :data:`~robustmargin.Censoring.OPEN_LOWER`.
     warnings
         Free-text notes (for example, an inner fit that failed while stepping outward).
     """
@@ -174,7 +174,7 @@ def solve_value(fit: Fit, *, target: float) -> tuple[float, float]:
     target
         The already-resolved target performance ``P*``. Must satisfy
         ``fit.params["lower"].value < target < fit.params["upper"].value`` -- callers check
-        reachability first (:func:`marginkit.censoring.classify`'s ``UNREACHABLE`` step).
+        reachability first (:func:`robustmargin.censoring.classify`'s ``UNREACHABLE`` step).
 
     Returns
     -------
@@ -196,14 +196,14 @@ def solve_value(fit: Fit, *, target: float) -> tuple[float, float]:
 def _theta_variance(fit: Fit, *, definition: Definition, target: float) -> float:
     """``Var(theta)`` on the *transformed* axis (``log(severity)`` on a log axis, raw severity on
     a linear one) -- the delta-method gradient assembly plan section 5.4 and this module's
-    docstring describe, factored out of :func:`delta_interval` so :mod:`marginkit.ratio` can
+    docstring describe, factored out of :func:`delta_interval` so :mod:`robustmargin.ratio` can
     reuse the exact same computation for its Fieller and log-delta variance inputs (plan section
     5.6) instead of reconstructing the gradient a second time, which would risk the two drifting
     apart. Not converted to a natural-scale or log-scale standard error here -- callers each do
     that conversion themselves, since Fieller and a single threshold's own delta interval need it
-    on different scales (:mod:`marginkit.ratio`'s module docstring).
+    on different scales (:mod:`robustmargin.ratio`'s module docstring).
 
-    Private: not part of the public API. Callable across modules (``marginkit.ratio`` imports it
+    Private: not part of the public API. Callable across modules (``robustmargin.ratio`` imports it
     directly) without being exported from either module's ``__all__``.
 
     Parameters
@@ -211,7 +211,7 @@ def _theta_variance(fit: Fit, *, definition: Definition, target: float) -> float
     fit
         A ``status is Status.OK`` fit.
     definition
-        The :class:`~marginkit.Definition` the threshold solves for (needed for ``d(q)/d(u)``
+        The :class:`~robustmargin.Definition` the threshold solves for (needed for ``d(q)/d(u)``
         and ``d(q)/d(l)`` when an asymptote is estimated).
     target
         The already-resolved target performance.
@@ -685,7 +685,7 @@ def profile_interval(
     fit
         A ``status is Status.OK`` fit.
     definition
-        The :class:`~marginkit.Definition` the threshold solves for -- only used by the
+        The :class:`~robustmargin.Definition` the threshold solves for -- only used by the
         estimated-asymptote path, where the candidate asymptotes at each inner evaluation move
         both ``z*`` and (for ``baseline_fraction``) the target itself.
     target
@@ -736,7 +736,7 @@ def delta_interval(
     fit
         A ``status is Status.OK`` fit.
     definition
-        The :class:`~marginkit.Definition` the threshold solves for (needed for ``d(q)/d(u)``
+        The :class:`~robustmargin.Definition` the threshold solves for (needed for ``d(q)/d(u)``
         and ``d(q)/d(l)`` when an asymptote is estimated).
     target
         The already-resolved target performance.
@@ -748,7 +748,7 @@ def delta_interval(
     Returns
     -------
     IntervalResult
-        ``censoring`` is always :data:`~marginkit.Censoring.NONE`: the delta method has no
+        ``censoring`` is always :data:`~robustmargin.Censoring.NONE`: the delta method has no
         open-sided outcome.
     """
     var_theta = _theta_variance(fit, definition=definition, target=target)

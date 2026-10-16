@@ -1,5 +1,6 @@
-"""Unit tests for ``marginkit.report``: ``to_dict`` / ``from_dict`` / ``load_schema`` and the
-v1 JSON schema.
+"""Unit tests for ``robustmargin.report``: ``to_dict`` / ``from_dict`` / ``load_schema`` and the
+packaged score-card JSON schema (``"4"`` as of ``decisions/0027``; the reader reads ``"4"`` only,
+and ``tests/unit/test_schema_v4.py`` owns the old-version rejections and the schema-identity pins).
 
 Round-trips every serialisable result type, ``GridBreakPoint`` included (R5 #3, plan section
 4.2's "JSON envelope"), and checks the error paths that keep a saved score card from silently
@@ -18,8 +19,8 @@ from collections.abc import Callable
 import jsonschema
 import pytest
 
-import marginkit
-from marginkit import (
+import robustmargin
+from robustmargin import (
     AdjacentPair,
     Axis,
     Cell,
@@ -38,8 +39,8 @@ from marginkit import (
     Threshold,
     grid_break_point,
 )
-from marginkit.report import SCHEMA_VERSION, from_dict, load_schema, to_dict
-from marginkit.testing import fake_fit, fake_ratio, fake_threshold
+from robustmargin.report import SCHEMA_VERSION, from_dict, load_schema, to_dict
+from robustmargin.testing import fake_fit, fake_ratio, fake_threshold
 
 _TAGGED_TYPES: tuple[type, ...] = (Scorecard, GridBreakPoint, Fit, Threshold, Ratio)
 _HELPER_TYPES: tuple[type, ...] = (
@@ -197,11 +198,11 @@ class TestFromDictErrors:
 
         assert "not_a_real_field" in str(exc_info.value)
 
-    def test_unknown_field_in_scorecard_message_includes_marginkit_version(self) -> None:
+    def test_unknown_field_in_scorecard_message_includes_library_version(self) -> None:
         """Item 3, round 3: for a ``Scorecard`` specifically, an unknown-field error also names
-        the version that produced it -- the detail most useful for telling "a newer marginkit
+        the version that produced it -- the detail most useful for telling "a different release
         wrote this" apart from "this file is simply corrupt"."""
-        card = Scorecard(results=(_grid_result(),), provenance={}, marginkit_version="9.9.9")
+        card = Scorecard(results=(_grid_result(),), provenance={}, library_version="9.9.9")
         payload = to_dict(card)
         payload["not_a_real_field"] = 1
 
@@ -249,7 +250,7 @@ class TestFromDictValidatesNestedTypeTags:
 
 
 class TestFromDictScorecardRequiresCreatedAtAndVersion:
-    """Rule 20: a ``Scorecard`` payload missing ``created_at`` or ``marginkit_version`` must
+    """Rule 20: a ``Scorecard`` payload missing ``created_at`` or ``library_version`` must
     raise, rather than silently filling in the dataclass's own ``default_factory`` (today's
     time, the currently-installed version) -- that would invent metadata about a record that
     was actually produced somewhere else, at some other time, by some other version.
@@ -263,10 +264,10 @@ class TestFromDictScorecardRequiresCreatedAtAndVersion:
         with pytest.raises(ValueError):
             from_dict(payload)
 
-    def test_missing_marginkit_version_raises(self) -> None:
+    def test_missing_library_version_raises(self) -> None:
         card = Scorecard(results=(_grid_result(),), provenance={})
         payload = to_dict(card)
-        del payload["marginkit_version"]
+        del payload["library_version"]
 
         with pytest.raises(ValueError):
             from_dict(payload)
@@ -344,13 +345,12 @@ class TestLoadSchema:
 
 class TestSchemaIsStrict:
     """Item 3, round 3: every object in the schema (root and every ``$defs`` entry) sets
-    ``"additionalProperties": false``, and v1 is binomial-only, so ``Fit.model``'s enum is
+    ``"additionalProperties": false``, and the schema is binomial-only, so ``Fit.model``'s enum is
     exactly ``["binomial"]`` -- not just documented as binomial-only by convention."""
 
     def test_fit_schema_rejects_an_extra_key(self) -> None:
-        # decisions/0023 made "diagnostics" a real Fit field (schema v3), so a genuinely-unknown
-        # marker key is needed here instead -- "diagnostics" itself would no longer trip this
-        # check.
+        # "diagnostics" is a real Fit field, so a genuinely-unknown marker key is needed here --
+        # "diagnostics" itself would not trip this check.
         schema = load_schema()
         validator = jsonschema.Draft202012Validator(
             {"$defs": schema["$defs"], "$ref": "#/$defs/Fit"}
@@ -409,7 +409,7 @@ class TestSchemaFieldParity:
 
         assert schema_properties == field_names | {"type"}
 
-    def test_root_schema_requires_created_at_and_marginkit_version(self) -> None:
+    def test_root_schema_requires_created_at_and_library_version(self) -> None:
         """Rule 20: the schema's own ``required`` list is the second copy of "these two fields
         must not be silently invented" -- if it drifts from what ``from_dict`` actually
         enforces, a consumer validating against the schema alone would not catch a payload
@@ -417,7 +417,7 @@ class TestSchemaFieldParity:
         schema = load_schema()
 
         assert "created_at" in schema["required"]
-        assert "marginkit_version" in schema["required"]
+        assert "library_version" in schema["required"]
 
 
 # ------------------------------------------------------------------------------------------
@@ -589,10 +589,9 @@ class TestFromDictRequiredKeyParityWithSchema:
 
 class TestFromDictChecksSchemaVersionBeforeUnknownFields:
     def test_wrong_schema_version_with_an_extra_key_names_the_version(self) -> None:
-        # decisions/0022 made "2" a real, supported schema_version (SCHEMA_VERSION itself), so a
-        # genuinely-unrecognised version needs a number outside _SUPPORTED_SCHEMA_VERSIONS --
-        # "999" matches TestUnknownSchemaVersion's own choice elsewhere in this file, rather than
-        # picking a value that was wrong only by coincidence of when this test was written.
+        # "999" is outside every version this package has ever used, so it stays unrecognised
+        # however many schema bumps follow -- unlike a "next version" number, which would become
+        # valid by coincidence of when this test was written.
         card = Scorecard(results=(_grid_result(),), provenance={})
         payload = to_dict(card)
         payload["schema_version"] = "999"
@@ -606,14 +605,13 @@ class TestFromDictChecksSchemaVersionBeforeUnknownFields:
 
 class TestFromDictNestedUnknownFieldNamesFieldAndBothVersions:
     """An unknown field at any depth inside a ``Scorecard`` -- not only at the top level --
-    raises ``ValueError`` naming the field, the card's own ``marginkit_version``, and this
+    raises ``ValueError`` naming the field, the card's own ``library_version``, and this
     reader's version."""
 
     def test_unknown_field_on_a_nested_fit_names_field_and_both_versions(self) -> None:
-        # decisions/0023 made "diagnostics" a real Fit field (schema v3): setting it to a value
-        # already present under its own default would no longer be an unknown field, so a
+        # "diagnostics" is a real Fit field, so setting it would not be an unknown field; a
         # distinct marker key is used instead.
-        card = Scorecard(results=(fake_threshold(),), provenance={}, marginkit_version="9.9.9")
+        card = Scorecard(results=(fake_threshold(),), provenance={}, library_version="9.9.9")
         payload = to_dict(card)
         payload["results"][0]["fit"]["not_a_real_field_at_all"] = None
 
@@ -623,7 +621,7 @@ class TestFromDictNestedUnknownFieldNamesFieldAndBothVersions:
         message = str(exc_info.value)
         assert "not_a_real_field_at_all" in message
         assert "9.9.9" in message
-        assert marginkit.__version__ in message
+        assert robustmargin.__version__ in message
 
 
 # ------------------------------------------------------------------------------------------
@@ -641,7 +639,7 @@ class TestFromDictNestedUnknownFieldNamesFieldAndBothVersions:
 
 class TestThresholdBaselineAndGridRoundTrip:
     def test_fails_at_baseline_threshold_with_baseline_rate_round_trips(self) -> None:
-        from marginkit import BaselineRate
+        from robustmargin import BaselineRate
 
         # FAILS_AT_BASELINE places no constraint on fit.status (plan section 5.5, decisions/0008):
         # the control's exact test does not depend on the rest of the curve having converged, so
@@ -704,11 +702,11 @@ class TestThresholdBaselineAndGridRoundTrip:
         assert rebuilt.baseline is None
 
     def test_a_card_written_without_baseline_or_grid_keys_still_loads(self) -> None:
-        """Simulates a card written by a marginkit older than Phase 5, before these fields
-        existed at all -- not merely a card with ``"baseline": null``, which ``to_dict`` would
-        already write for every non-FAILS_AT_BASELINE/non-fallback threshold. Both keys are
-        deleted outright, and ``from_dict`` must still load the payload, filling each field from
-        the dataclass's own default (``None``), the same way it already does for ``warnings``
+        """A payload that omits both keys outright -- not merely ``"baseline": null``, which
+        ``to_dict`` would already write for every non-FAILS_AT_BASELINE/non-fallback threshold.
+        Neither key is in the schema's ``required`` list, so ``from_dict`` must still load the
+        payload, filling each field from the dataclass's own default (``None``), the same way it
+        already does for ``warnings``
         (``TestFromDictErrors::test_missing_defaulted_field_is_filled_from_its_default``).
         """
         payload = to_dict(fake_threshold())
@@ -724,10 +722,9 @@ class TestThresholdBaselineAndGridRoundTrip:
 
 
 # ------------------------------------------------------------------------------------------
-# Phase 7, decisions/0023: Fit.diagnostics, an appended field defaulting to None, serialised
-# under schema_version "3". Mirrors TestThresholdBaselineAndGridRoundTrip's own two-test shape:
-# a real value round-trips, and a card written before this field existed (no "diagnostics" key
-# at all) still loads, filling the dataclass default.
+# Phase 7, decisions/0023: Fit.diagnostics, an appended field defaulting to None. Mirrors
+# TestThresholdBaselineAndGridRoundTrip's own two-test shape: a real value round-trips, and a
+# payload that omits the "diagnostics" key outright still loads, filling the dataclass default.
 # ------------------------------------------------------------------------------------------
 
 
@@ -750,28 +747,17 @@ def _sample_diagnostics() -> Diagnostics:
     )
 
 
-def _v2_shaped_fit_payload() -> dict[str, object]:
-    """A ``Fit`` payload shaped like a genuine v2 card: tagged ``schema_version="2"``, with
-    *neither* v3-only key present at all -- not merely ``null``, which a fresh v3
-    ``to_dict(fake_fit())`` would also produce, but which a real v1/v2 writer never emitted in
-    the first place, since the fields did not exist yet.
-
-    Before ``decisions/0023`` Amendment 2 item 4 ("fake_fit mirrors a real fit"), a fresh
-    ``fake_fit()`` left both fields ``None`` by default, so the two "written without the key"
-    tests below could use a plain ``to_dict(fake_fit())`` and assert ``is None`` first as a
-    precondition. Amendment 2 item 4 makes that precondition false: a fresh, ``Status.OK``
-    ``fake_fit()`` now always fills both through the real ``diagnose()``/``check_monotonicity()``
-    paths. What those two tests actually check -- a key that is *absent* loads as ``None``
-    (Appendix B item 4) -- is unchanged and still needs covering, so the base payload here is a
-    v2-shaped one instead: downgrading ``schema_version`` alone would not be enough, since
-    ``tests/unit/test_schema_rewrite_fidelity.py`` pins that a ``"2"``-tagged ``Fit`` carrying
-    either key (even ``null``) is rejected by ``from_dict`` -- so both keys are deleted here,
-    not just the one each test is about.
+def _fit_payload_without(key: str) -> dict[str, object]:
+    """A current-schema ``Fit`` payload with ``key`` deleted outright -- not merely ``null``,
+    which a fresh ``to_dict(fake_fit())`` would also produce. Neither ``diagnostics`` nor
+    ``monotonicity`` is in the schema's ``required`` list, so the omission is legal and
+    ``from_dict`` fills the dataclass default. A fresh ``Status.OK`` ``fake_fit()`` fills both
+    through the real ``diagnose()``/``check_monotonicity()`` paths, so the precondition that the
+    key was present is asserted rather than assumed.
     """
     payload = to_dict(fake_fit())
-    payload["schema_version"] = "2"
-    del payload["diagnostics"]
-    del payload["monotonicity"]
+    assert payload[key] is not None
+    del payload[key]
     return payload
 
 
@@ -794,22 +780,23 @@ class TestFitDiagnosticsRoundTrip:
         assert rebuilt.diagnostics is None
 
     def test_a_fit_written_without_a_diagnostics_key_still_loads(self) -> None:
-        """Simulates a card written before this field existed at all (a v2-shaped payload, see
-        ``_v2_shaped_fit_payload``): the key is absent outright, and ``from_dict`` must still
-        load the payload, filling the dataclass's own default (``None``) -- Appendix B item 4,
-        the same pattern as ``Threshold.baseline``/``.grid`` before it.
+        """The key is absent outright, and ``from_dict`` must still load the payload, filling
+        the dataclass's own default (``None``) -- the same pattern as
+        ``Threshold.baseline``/``.grid``. The other appended field is left in place, so this
+        pins the ``diagnostics`` omission on its own.
         """
-        payload = _v2_shaped_fit_payload()
+        payload = _fit_payload_without("diagnostics")
 
         rebuilt = from_dict(payload)
 
         assert rebuilt.diagnostics is None
+        assert rebuilt.monotonicity is not None
 
 
 # ------------------------------------------------------------------------------------------
 # Phase 7, decisions/0023 Amendment 1: Fit.monotonicity, the *last* appended field, populated on
 # every fit_dose_response return path (unlike diagnostics, never None for a fresh OK-or-not
-# result) but still None on a card read from schema "1" or "2" (Amendment 1, item 8).
+# result).
 # ------------------------------------------------------------------------------------------
 
 
@@ -870,12 +857,12 @@ class TestFitMonotonicityRoundTrip:
         assert rebuilt.monotonicity is None
 
     def test_a_fit_written_without_a_monotonicity_key_still_loads(self) -> None:
-        """A card written before this field existed (a v2-shaped payload, see
-        ``_v2_shaped_fit_payload`` -- schema "1" or "2", predating even ``diagnostics``): the key
-        is absent outright, and ``from_dict`` must still load the payload, filling the dataclass
-        default (``None``) -- Amendment 1, item 8."""
-        payload = _v2_shaped_fit_payload()
+        """The key is absent outright, and ``from_dict`` must still load the payload, filling
+        the dataclass default (``None``). The other appended field is left in place, so this
+        pins the ``monotonicity`` omission on its own."""
+        payload = _fit_payload_without("monotonicity")
 
         rebuilt = from_dict(payload)
 
         assert rebuilt.monotonicity is None
+        assert rebuilt.diagnostics is not None

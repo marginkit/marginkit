@@ -54,7 +54,7 @@ from __future__ import annotations
 
 import pytest
 
-from marginkit import Axis, Observations, Status, fit_dose_response
+from robustmargin import Axis, Observations, Status, fit_dose_response
 
 _AXIS = Axis(name="severity", unit="unit", scale="log")
 

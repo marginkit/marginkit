@@ -5,14 +5,14 @@
 ``B = theta_a*theta_b - z^2*C``, ``K = theta_a^2 - z^2*Va`` (``C = 0`` under
 ``dependence="independent"``) -- on the *natural* severity scale, or the log-delta interval
 (``log(ratio)``, variance ``Va + Vb`` on the log scale, exponentiated back around the estimate).
-Both reuse the exact per-threshold delta-method variance :mod:`marginkit.intervals` already
+Both reuse the exact per-threshold delta-method variance :mod:`robustmargin.intervals` already
 computes for a single threshold's own interval (``intervals._theta_variance``), rather than
 reassembling the gradient a second time.
 
 **A note on three different things all called ``theta``.** Plan section 5.6's Fieller paragraph
 writes ``theta`` for a threshold's value on the *original* severity scale
 (:attr:`Threshold.value`); its log-delta paragraph writes ``theta`` for ``log(x*)``; and
-:mod:`marginkit.intervals` writes ``theta`` for yet a third thing, the axis it actually optimises
+:mod:`robustmargin.intervals` writes ``theta`` for yet a third thing, the axis it actually optimises
 over (``log(severity)`` on a log axis, raw severity on a linear one). All three coincide only on
 a log axis. Fieller here always converts ``intervals``' transformed-scale ``Var(theta)`` to the
 natural scale via the delta method's own chain rule for ``value = exp(theta)`` on a log axis
@@ -36,9 +36,9 @@ out to occupy an open region of the parameter space rather than the measure-zero
 taken for, ``IntervalShape`` gains ``HALF_OPEN`` for the Fieller half-line that `decisions/0017`'s
 ``A == 0`` boundary and `decisions/0021`'s ``EXCLUSIVE``-candidate branch each turn out to
 produce when ``K > 0`` -- superseding `0017` in part, narrowing `0021`, and moving
-``schema_version`` to ``"2"`` (`decisions/0022`; the ``dependence="independent"`` guard's
-shared-``Fit`` check, meanwhile, moved from :class:`Ratio` to this function, a public-API
-decision recorded against `decisions/0018`'s amendment).
+``schema_version`` to ``"2"`` in the former ``marginkit`` card format (`decisions/0022`; the
+``dependence="independent"`` guard's shared-``Fit`` check, meanwhile, moved from :class:`Ratio`
+to this function, a public-API decision recorded against `decisions/0018`'s amendment).
 """
 
 from __future__ import annotations
@@ -49,9 +49,9 @@ from dataclasses import dataclass, field
 
 from scipy.stats import norm
 
-from marginkit.intervals import _MAX_LOG_HALF_WIDTH, _theta_variance
-from marginkit.threshold import Threshold, _resolve_target
-from marginkit.types import Censoring, IntervalShape, JSONValue, Status, _check_finite_number
+from robustmargin.intervals import _MAX_LOG_HALF_WIDTH, _theta_variance
+from robustmargin.threshold import Threshold, _resolve_target
+from robustmargin.types import Censoring, IntervalShape, JSONValue, Status, _check_finite_number
 
 __all__ = ["Ratio", "ratio_interval"]
 
@@ -82,14 +82,14 @@ class Ratio:
     Attributes
     ----------
     threshold_a, threshold_b
-        The two :class:`~marginkit.Threshold` results the ratio is between (``a / b``). Their
+        The two :class:`~robustmargin.Threshold` results the ratio is between (``a / b``). Their
         axes must match on ``name`` and ``unit`` (R5), and their ``definition`` must be equal
         (a ratio between two different target-performance definitions is not one number); a
         mismatch on either raises. With ``dependence="independent"``, the two fits must not be
         the very same object (``threshold_a.fit is threshold_b.fit``, object identity only --
         `decisions/0018`'s amendment) and must not share a cluster id (§5.6). Both checks are
         **necessary, not sufficient**: together they can only see object identity and the
-        ``cluster_ids`` a :class:`~marginkit.Fit` records, not whether the two series were drawn
+        ``cluster_ids`` a :class:`~robustmargin.Fit` records, not whether the two series were drawn
         from overlapping observations that carry no cluster id. Equal fits **by value** are not
         rejected: two disjoint samples can produce identical counts, and that ratio is valid --
         only the identical *object* is refused. ``ratio_interval`` checks only object identity
@@ -125,7 +125,7 @@ class Ratio:
 
         Both ``None`` otherwise.
     shape
-        The :class:`~marginkit.IntervalShape` of ``(lo, hi)`` when ``status`` is ``OK`` and
+        The :class:`~robustmargin.IntervalShape` of ``(lo, hi)`` when ``status`` is ``OK`` and
         ``censoring`` is ``NONE``; ``None`` otherwise (including when ``status``/``censoring``
         make a shape meaningless).
     method
@@ -139,11 +139,11 @@ class Ratio:
     level
         The confidence level, strictly between 0 and 1.
     censoring
-        The :class:`~marginkit.Censoring` propagated from the input thresholds
+        The :class:`~robustmargin.Censoring` propagated from the input thresholds
         (`decisions/0015`), direction-aware: read against the ratio itself, not against either
         threshold's own tested range.
     status
-        The :class:`~marginkit.Status` of this ratio.
+        The :class:`~robustmargin.Status` of this ratio.
     warnings
         Free-text notes surfaced alongside the ratio. Empty by default. :func:`ratio_interval`
         carries both ``threshold_a.warnings`` and ``threshold_b.warnings`` here too
@@ -151,12 +151,12 @@ class Ratio:
         entry on either input threshold propagates through, on every path (censored/failed and
         the ``OK``+``NONE`` path alike).
     schema_version
-        The serialised-result schema version this object belongs to. Defaults to ``"3"``
-        (`decisions/0023`); ``from_dict`` still reads ``"1"`` and ``"2"`` cards, neither of whose
-        ``shape`` was ever ``HALF_OPEN``.
+        The serialised-result schema version this object belongs to. Defaults to ``"4"``, the
+        only version ``from_dict`` reads; ``"1"``, ``"2"`` and ``"3"`` (the card format of this
+        package's former name, ``marginkit``) are rejected.
     provenance
         An opaque mapping the caller may attach to record where the inputs came from.
-        marginkit stores it and never interprets it. Empty by default.
+        robustmargin stores it and never interprets it. Empty by default.
     """
 
     threshold_a: Threshold
@@ -171,7 +171,7 @@ class Ratio:
     censoring: Censoring
     status: Status
     warnings: tuple[str, ...] = ()
-    schema_version: str = "3"
+    schema_version: str = "4"
     provenance: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -317,7 +317,7 @@ class Ratio:
             # covariance term at 0 (`decisions/0022`): every same-signed-root case that would
             # produce this shape needs a nonzero covariance, which only v0.2's
             # `dependence="paired"` can supply. The invariant stays enforced -- for a `Ratio`
-            # built directly (as `marginkit.testing.fake_ratio` does) and for when `paired`
+            # built directly (as `robustmargin.testing.fake_ratio` does) and for when `paired`
             # lands -- rather than being deleted along with the now-dead production path.
             if self.lo is None or self.hi is None:
                 raise ValueError(
@@ -392,9 +392,9 @@ _CENSORING_FLIP: dict[Censoring, Censoring] = {
 
 
 def _theta_variance_for(t: Threshold) -> float:
-    """``Var(theta)`` on :mod:`marginkit.intervals`' own transformed axis, for threshold ``t`` --
+    """``Var(theta)`` on :mod:`robustmargin.intervals`' own transformed axis, for threshold ``t`` --
     delegates the delta-method gradient assembly to ``intervals._theta_variance`` (the same
-    function :func:`marginkit.intervals.delta_interval` uses for its own cross-check interval)
+    function :func:`robustmargin.intervals.delta_interval` uses for its own cross-check interval)
     rather than reconstructing it here, and never reconstructs a variance by inverting ``t.lo``/
     ``t.hi`` -- that fails for a profile interval (whose ``lo``/``hi`` are not delta-method
     endpoints at all) and for the open- or both-sides-open cases, where one or both are ``None``.
@@ -725,9 +725,9 @@ def ratio_interval(
     ``method="log_delta"`` uses the log-scale delta method and additionally requires, once both
     inputs are known to be ``(OK, NONE)``, that both axes' ``scale`` are ``"log"`` and both
     thresholds' ``value`` are ``> 0``. Both use the normal quantile ``z``, never a Student-t
-    quantile, matching the rest of marginkit -- R ``drc``'s own
+    quantile, matching the rest of robustmargin -- R ``drc``'s own
     ``EDcomp(interval="fieller")`` uses ``qt`` instead, which is why its interval endpoints (not
-    its point estimates) do not match marginkit's at the usual reference tolerance
+    its point estimates) do not match robustmargin's at the usual reference tolerance
     (``tests/reference/test_ratio_drc_edcomp.py``).
 
     ``IntervalShape.EXCLUSIVE`` is **unreachable** through this function while
@@ -753,14 +753,14 @@ def ratio_interval(
         ``"fieller"`` or ``"log_delta"``.
     dependence
         ``"independent"`` only, in this release. ``"paired"`` raises, naming that it is v0.2
-        Phase 9 work (mirrors :func:`marginkit.threshold`'s own guard for the same request).
+        Phase 9 work (mirrors :func:`robustmargin.threshold`'s own guard for the same request).
         Under ``"independent"``, ``t_a.fit`` and ``t_b.fit`` must not be the same object and
         must not share a cluster id -- both checks are necessary but **not sufficient** for
         actual independence (`decisions/0018` and its amendment).
 
         **This function does not verify independence; establishing it is the caller's
-        responsibility.** Nothing in marginkit records an observation id (only
-        :attr:`~marginkit.Fit.cluster_ids`, one entry per distinct cluster, not per row), so two
+        responsibility.** Nothing in robustmargin records an observation id (only
+        :attr:`~robustmargin.Fit.cluster_ids`, one entry per distinct cluster, not per row), so two
         fits built from overlapping rows that carry no cluster ids are accepted here and produce
         a ``Ratio`` whose stated coverage is wrong -- silently, because there is nothing left in
         the package to check it against. This is a documented limitation (`decisions/0018`), not
@@ -773,7 +773,7 @@ def ratio_interval(
     Returns
     -------
     Ratio
-        If either input is censored or has a failed :class:`~marginkit.Status`, the returned
+        If either input is censored or has a failed :class:`~robustmargin.Status`, the returned
         ``Ratio`` carries a propagated status/censoring flag and no numbers at all
         (`decisions/0015`) -- never a one-sided bound built by mixing an exact censoring bound
         in one threshold with a model-fitted value and its sampling error in the other.

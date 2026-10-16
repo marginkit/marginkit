@@ -5,9 +5,9 @@
 # environment requires the owner's approval, so nothing reaches PyPI without it.
 #
 # One-time setup, done by the owner:
-#   - pypi.org and test.pypi.org: add a pending publisher for project `marginkit`,
-#     owner `marginkit` (the GitHub organization), repository `marginkit`, workflow `release.yml`,
-#     environment `pypi` (pypi.org) or `testpypi` (test.pypi.org).
+#   - pypi.org and test.pypi.org: add a pending publisher for project `robustmargin`,
+#     owner `robustmargin` (the GitHub organization), repository `robustmargin`,
+#     workflow `release.yml`, environment `pypi` (pypi.org) or `testpypi` (test.pypi.org).
 #   - GitHub: create environments `testpypi` and `pypi`, the latter with the owner as a
 #     required reviewer and deployment restricted to `v*` tags.
 name: release
@@ -41,7 +41,7 @@ jobs:
       - id: version
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          code="$(python -c 'import ast,pathlib; t=ast.parse(pathlib.Path("src/marginkit/__init__.py").read_text()); print(next(n.value.value for n in t.body if isinstance(n, ast.Assign) and any(getattr(x, "id", None) == "__version__" for x in n.targets)))')"
+          code="$(python -c 'import ast,pathlib; t=ast.parse(pathlib.Path("src/robustmargin/__init__.py").read_text()); print(next(n.value.value for n in t.body if isinstance(n, ast.Assign) and any(getattr(x, "id", None) == "__version__" for x in n.targets)))')"
           echo "tag=$tag code=$code"
           test "$tag" = "$code"
           echo "version=$tag" >> "$GITHUB_OUTPUT"
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/project/marginkit/${{ needs.build.outputs.version }}/
+      url: https://test.pypi.org/project/robustmargin/${{ needs.build.outputs.version }}/
     permissions:
       id-token: write
     steps:
@@ -85,16 +85,16 @@ jobs:
         with:
           python-version: "3.11"
       # TestPyPI does not mirror numpy, scipy or statsmodels, so dependencies come from PyPI
-      # and only marginkit itself from TestPyPI. --no-cache-dir and the retry loop allow for the
+      # and only robustmargin itself from TestPyPI. --no-cache-dir and the retry loop allow for the
       # index taking a minute to show a fresh upload.
       - run: |
           v="${{ needs.build.outputs.version }}"
           for i in 1 2 3 4 5 6; do
             pip install --no-cache-dir --index-url https://test.pypi.org/simple/ \
-              --extra-index-url https://pypi.org/simple/ "marginkit==$v" && break
+              --extra-index-url https://pypi.org/simple/ "robustmargin==$v" && break
             sleep 30
           done
-          python -c "import marginkit; assert marginkit.__version__ == '$v', marginkit.__version__; print('installed marginkit', marginkit.__version__)"
+          python -c "import robustmargin; assert robustmargin.__version__ == '$v', robustmargin.__version__; print('installed robustmargin', robustmargin.__version__)"
 
   pypi:
     name: publish to PyPI
@@ -104,7 +104,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/marginkit/${{ needs.build.outputs.version }}/
+      url: https://pypi.org/project/robustmargin/${{ needs.build.outputs.version }}/
     permissions:
       id-token: write
     steps:

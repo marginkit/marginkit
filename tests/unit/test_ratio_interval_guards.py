@@ -30,7 +30,7 @@ import math
 
 import pytest
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Censoring,
@@ -40,7 +40,7 @@ from marginkit import (
     Threshold,
     ratio_interval,
 )
-from marginkit.models import Covariance, Parameter
+from robustmargin.models import Covariance, Parameter
 
 _AXIS = Axis(name="noise", unit="m", scale="log")
 _CELLS = (

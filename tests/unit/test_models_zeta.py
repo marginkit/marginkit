@@ -13,7 +13,7 @@ import csv
 import math
 from pathlib import Path
 
-from marginkit import Axis, Observations, Status, fit_dose_response
+from robustmargin import Axis, Observations, Status, fit_dose_response
 
 _CSV_PATH = Path(__file__).resolve().parents[1] / "data" / "zeta_matrix_counts.csv"
 

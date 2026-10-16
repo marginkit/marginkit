@@ -31,7 +31,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Censoring,
     Definition,

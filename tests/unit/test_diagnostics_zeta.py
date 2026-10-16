@@ -8,7 +8,7 @@ monotonicity-flag change on this file is either a real statistical finding or a 
 never adjust an assertion here to make it pass.
 
 Amendment 1 to decisions/0023 exists *because* of this exact series: ``ppo_sensor_noise`` never
-reaches ``Status.OK`` through :func:`~marginkit.fit_dose_response` under fixed ``upper=1.0``
+reaches ``Status.OK`` through :func:`~robustmargin.fit_dose_response` under fixed ``upper=1.0``
 (``CONTROL_INCOMPATIBLE``, the zero-severity control has failures) or under ``upper="estimate"``
 (``SEPARATION``, quasi-complete at severity 0.01) -- see ``tests/unit/test_models_zeta.py``.
 ``Fit.monotonicity`` is computed from the raw ``Observations`` *before* a fitting path is even
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Definition,
     Fit,

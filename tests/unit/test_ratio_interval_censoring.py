@@ -2,8 +2,8 @@
 
 **What is settled, and by what.** ``decisions/0015`` settles ``REVIEWS.md`` R6 #6: a censored or
 failed input threshold propagates a flag, never a number
-(``estimate``/``lo``/``hi``/``shape`` all ``None``, matching :class:`~marginkit.Ratio`'s own
-``__post_init__`` invariant), **and** which specific :class:`~marginkit.Censoring` the
+(``estimate``/``lo``/``hi``/``shape`` all ``None``, matching :class:`~robustmargin.Ratio`'s own
+``__post_init__`` invariant), **and** which specific :class:`~robustmargin.Censoring` the
 ``Ratio`` carries is direction-aware, per 0015's table:
 
 | ``threshold_a`` | ``threshold_b`` | ``Ratio.censoring`` |
@@ -39,7 +39,7 @@ result exactly), and why ``TestCensoringDirectionAppliesRegardlessOfStatus`` now
 ``.status`` too, not only ``.censoring``.
 
 Building real censored/failed fits for every combination would be disproportionate to what this
-file checks, so every threshold here comes from ``marginkit.testing.fake_threshold``, which
+file checks, so every threshold here comes from ``robustmargin.testing.fake_threshold``, which
 already produces schema-valid objects for each ``(status, censoring)`` combination plan section
 5.5 allows, on a shared axis/definition (so the axis/definition guards, tested separately in
 ``tests/unit/test_ratio_interval_guards.py``, never fire here by accident).
@@ -49,11 +49,11 @@ from __future__ import annotations
 
 import pytest
 
-from marginkit import Censoring, Ratio, Status, ratio_interval
-from marginkit.testing import fake_threshold
+from robustmargin import Censoring, Ratio, Status, ratio_interval
+from robustmargin.testing import fake_threshold
 
 # The fourteen (status, censoring) combinations plan section 5.5 allows for a Threshold,
-# mirroring marginkit.testing._ALLOWED_THRESHOLD_COMBINATIONS. (Status.OK, Censoring.NONE) is
+# mirroring robustmargin.testing._ALLOWED_THRESHOLD_COMBINATIONS. (Status.OK, Censoring.NONE) is
 # the one "clean" combination and is exercised as the control case below, not as a "problem"
 # case in this list.
 _PROBLEM_COMBINATIONS: tuple[tuple[Status, Censoring], ...] = (

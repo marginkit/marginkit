@@ -1,9 +1,9 @@
 """The threshold result (§5.5) and :func:`threshold`, which solves for one (§5.3-§5.5).
 
-:func:`threshold` resolves the target performance for a :class:`~marginkit.Definition`
-(`decisions/0008`), classifies the fit against it (:mod:`marginkit.censoring`), and -- when the
+:func:`threshold` resolves the target performance for a :class:`~robustmargin.Definition`
+(`decisions/0008`), classifies the fit against it (:mod:`robustmargin.censoring`), and -- when the
 classification says to -- solves the closed form and runs the requested interval method
-(:mod:`marginkit.intervals`). ``interval_method`` is a *request*: every censored or failed
+(:mod:`robustmargin.intervals`). ``interval_method`` is a *request*: every censored or failed
 result records ``"exact_bound"`` regardless of what was asked for, because that is the method
 that actually produced its numbers.
 """
@@ -13,11 +13,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from marginkit.censoring import classify
-from marginkit.empirical import BaselineRate, GridBreakPoint
-from marginkit.intervals import delta_interval, profile_interval, solve_value
-from marginkit.models import Fit
-from marginkit.types import (
+from robustmargin.censoring import classify
+from robustmargin.empirical import BaselineRate, GridBreakPoint
+from robustmargin.intervals import delta_interval, profile_interval, solve_value
+from robustmargin.models import Fit
+from robustmargin.types import (
     Axis,
     Cell,
     Censoring,
@@ -110,7 +110,7 @@ class Threshold:
     Attributes
     ----------
     axis
-        The :class:`~marginkit.Axis` this threshold was solved on. Must equal ``fit.axis``.
+        The :class:`~robustmargin.Axis` this threshold was solved on. Must equal ``fit.axis``.
     definition
         Which target performance this threshold solves for (§5.3).
     direction
@@ -126,28 +126,29 @@ class Threshold:
     interval_method
         ``"profile"``, ``"delta"`` or ``"exact_bound"``.
     censoring
-        The :class:`~marginkit.Censoring` classification.
+        The :class:`~robustmargin.Censoring` classification.
     status
-        The :class:`~marginkit.Status` of this threshold.
+        The :class:`~robustmargin.Status` of this threshold.
     dependence
         ``"independent"`` in this release. Required, with no default: a threshold built from
         clustered data must say so explicitly rather than silently assuming independence (R2).
     fit
-        The :class:`~marginkit.Fit` this threshold was solved from. Per-level trial counts
+        The :class:`~robustmargin.Fit` this threshold was solved from. Per-level trial counts
         (R10) live on ``fit.cells``, not on a separate field.
     warnings
         Free-text notes surfaced alongside the threshold. Empty by default. Carries a
         ``"NON_MONOTONE_DATA: "``-prefixed entry whenever ``fit.monotonicity.any_flagged``
         (`decisions/0023` "Amendment 1"), whatever ``status``/``censoring`` turn out to be --
-        distinct from :mod:`marginkit.censoring`'s own ``"NON_MONOTONE: "`` token, which compares
+        distinct from :mod:`robustmargin.censoring`'s own ``"NON_MONOTONE: "`` token, which compares
         exact one-sided bounds against the *fitted* curve rather than testing raw adjacent
         levels; the two may disagree and both are reported when they fire.
     schema_version
-        The serialised-result schema version this object belongs to. Defaults to ``"3"``
-        (`decisions/0023`); ``from_dict`` still reads ``"1"`` and ``"2"`` cards.
+        The serialised-result schema version this object belongs to. Defaults to ``"4"``, the
+        only version ``from_dict`` reads; ``"1"``, ``"2"`` and ``"3"`` (the card format of this
+        package's former name, ``marginkit``) are rejected.
     provenance
         An opaque mapping the caller may attach to record where the inputs came from.
-        marginkit stores it and never interprets it. Empty by default.
+        robustmargin stores it and never interprets it. Empty by default.
     baseline
         The zero-severity control's exact rate, set exactly when ``status`` is
         ``FAILS_AT_BASELINE`` (`decisions/0010`); ``None`` otherwise. Appended field, additive
@@ -171,7 +172,7 @@ class Threshold:
     dependence: str
     fit: Fit
     warnings: tuple[str, ...] = ()
-    schema_version: str = "3"
+    schema_version: str = "4"
     provenance: Mapping[str, JSONValue] = field(default_factory=dict)
     baseline: BaselineRate | None = None
     grid: GridBreakPoint | None = None
@@ -450,7 +451,7 @@ def threshold(
     ``interval_method`` is a *request*, not a promise: every censored or failed result records
     ``"exact_bound"`` regardless of what was requested, because that is the method that actually
     produced its numbers (§5.2, §5.5). The order in which the outcomes below are checked is
-    :mod:`marginkit.censoring`'s module docstring, not this one's.
+    :mod:`robustmargin.censoring`'s module docstring, not this one's.
 
     Parameters
     ----------

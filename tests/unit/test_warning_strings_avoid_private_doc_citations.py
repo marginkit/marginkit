@@ -4,21 +4,21 @@ are not in the public repository.
 `docs/`, `CLAUDE.md` and `docs/IMPLEMENTATION_PLAN.md` are not shipped with the package (see
 `.gitignore`): a consumer who reads a warning or exception message naming ``decisions/0023``,
 "plan section 5.7", ``IMPLEMENTATION_PLAN`` or ``STATISTICS.md``/``REVIEWS.md`` has no way to
-look any of them up. About 35 runtime string literals across ``src/marginkit/*.py`` do exactly
+look any of them up. About 35 runtime string literals across ``src/robustmargin/*.py`` do exactly
 this today (warning messages built with ``warnings.append``/``collected_warnings.append``, and
 ``raise ValueError(...)`` messages) -- confirmed by the static scan below before this test was
 written, per `CLAUDE.md`'s working rhythm.
 
 Two complementary checks:
 
-1. A static scan over every non-docstring string literal in ``src/marginkit/*.py`` (the
+1. A static scan over every non-docstring string literal in ``src/robustmargin/*.py`` (the
    authoritative, complete check: it cannot miss a reachable-but-untested code path, unlike any
    dynamic exercise). Docstrings are identified structurally (the first statement of a module,
    class or function body) and are out of scope, per the brief -- they document *why* a rule
    exists for a contributor reading the source, which is a different audience from someone
    reading a message a running program printed.
 2. A dynamic exercise of a representative sample of the real warning- and exception-producing
-   paths, through the public API (plus ``marginkit.testing``'s fakes and direct, public
+   paths, through the public API (plus ``robustmargin.testing``'s fakes and direct, public
    dataclass construction for paths that need a specific, otherwise hard-to-reach ``Fit``/
    ``Threshold`` shape), collecting the actual message strings a caller would see and checking
    them against the same pattern. This is not exhaustive -- the static scan is -- but it is
@@ -35,10 +35,11 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Censoring,
@@ -47,26 +48,28 @@ from marginkit import (
     Fit,
     Observations,
     Parameter,
+    Scorecard,
     Status,
     diagnose,
     fit_dose_response,
     ratio_interval,
     threshold,
 )
-from marginkit.testing import fake_threshold
+from robustmargin.report import from_dict, to_dict
+from robustmargin.testing import fake_threshold
 
 _FORBIDDEN_DOC_CITATION = re.compile(
     r"decisions/\d{4}|plan section|plan §|§\d|IMPLEMENTATION_PLAN|STATISTICS\.md|REVIEWS\.md"
     r"|\bD[1-7]\b"
 )
 
-_SRC_DIR = Path(__file__).resolve().parents[2] / "src" / "marginkit"
+_SRC_DIR = Path(__file__).resolve().parents[2] / "src" / "robustmargin"
 
 _LOG_AXIS = Axis(name="severity", unit="unit", scale="log")
 _LEVEL = 0.95
 
-# Every leading `UPPER_CASE: ` warning token found in src/marginkit (grep -rnoE
-# '[A-Z][A-Z_]{2,}: ' src/marginkit/*.py, filtered to actual message prefixes rather than
+# Every leading `UPPER_CASE: ` warning token found in src/robustmargin (grep -rnoE
+# '[A-Z][A-Z_]{2,}: ' src/robustmargin/*.py, filtered to actual message prefixes rather than
 # constant/dict-key names) -- frozen API, pinned byte-for-byte.
 _KNOWN_TOKENS: tuple[str, ...] = (
     "NON_MONOTONE_DATA: ",
@@ -77,7 +80,7 @@ _KNOWN_TOKENS: tuple[str, ...] = (
 
 
 # ------------------------------------------------------------------------------------------
-# 1. Static scan: every non-docstring string literal in src/marginkit/*.py.
+# 1. Static scan: every non-docstring string literal in src/robustmargin/*.py.
 # ------------------------------------------------------------------------------------------
 
 
@@ -104,7 +107,7 @@ def _docstring_node_ids(tree: ast.Module) -> set[int]:
 def _scan_for_doc_citations() -> list[tuple[str, int, str]]:
     """Every non-docstring string constant (including each literal fragment of an f-string,
     which ``ast`` represents as its own ``Constant`` inside a ``JoinedStr``) in
-    ``src/marginkit/*.py`` whose text matches ``_FORBIDDEN_DOC_CITATION``.
+    ``src/robustmargin/*.py`` whose text matches ``_FORBIDDEN_DOC_CITATION``.
 
     Returns a list of ``(filename, lineno, snippet)`` so a failure is immediately actionable.
     """
@@ -123,10 +126,20 @@ def _scan_for_doc_citations() -> list[tuple[str, int, str]]:
     return violations
 
 
+def test_the_static_scan_reads_the_package_sources_it_claims_to() -> None:
+    """A guard on ``_SRC_DIR``: ``Path.glob`` on a directory that does not exist yields nothing,
+    so a package rename that left ``_SRC_DIR`` pointing at the old name would make the scan
+    below pass vacuously. Every module that produces user-visible messages must be in it."""
+    scanned = {path.name for path in _SRC_DIR.glob("*.py")}
+
+    assert _SRC_DIR.name == "robustmargin"
+    assert {"report.py", "models.py", "threshold.py", "ratio.py", "validation.py"} <= scanned
+
+
 def test_no_runtime_string_literal_cites_an_unpublished_document() -> None:
     violations = _scan_for_doc_citations()
     assert not violations, (
-        "runtime string literal(s) in src/marginkit cite a document that is not in the public "
+        "runtime string literal(s) in src/robustmargin cite a document that is not in the public "
         f"repository ({_FORBIDDEN_DOC_CITATION.pattern}):\n"
         + "\n".join(f"  {name}:{lineno}: {snippet!r}" for name, lineno, snippet in violations)
     )
@@ -311,7 +324,7 @@ def _sparse_cells_fit() -> Fit:
 
 def _collect_dynamic_messages() -> list[str]:
     """Every message string from a representative sample of real warning- and
-    exception-producing paths, reached through the public API (plus ``marginkit.testing``'s
+    exception-producing paths, reached through the public API (plus ``robustmargin.testing``'s
     fakes, and direct public-dataclass construction for shapes a real fit cannot easily be
     coaxed into). Not exhaustive -- the static scan above is."""
     messages: list[str] = []
@@ -361,17 +374,29 @@ def _collect_dynamic_messages() -> list[str]:
         )
     messages.append(str(excinfo_relative.value))
 
-    # Fit.__post_init__: a pre-diagnostics schema_version carrying a non-None diagnostics value
-    # (decisions/0023 Amendment 2). _overdispersed_fit() itself builds diagnostics=None (the
-    # dataclass default), so diagnostics must be attached first, through a real diagnose() call,
-    # before the schema_version downgrade can trigger the guard at all.
-    import dataclasses
+    # from_dict: a card tagged with a retired schema_version (decisions/0027) -- once on a whole
+    # card, once nested inside a current one, once on a bare result -- and a version that is not
+    # retired but not recognised either. The retired-version message is new text written to be
+    # read by a person holding an old file, which is exactly the reader who cannot look up a
+    # document, so it is held to the same rule as every other message here.
+    for retired in ("1", "2", "3"):
+        old_card = to_dict(fake_threshold())
+        old_card["schema_version"] = retired
+        with pytest.raises(ValueError) as excinfo_retired_bare:
+            from_dict(old_card)
+        messages.append(str(excinfo_retired_bare.value))
 
-    ok_fit = _overdispersed_fit()
-    fit_with_diagnostics = dataclasses.replace(ok_fit, diagnostics=diagnose(ok_fit))
-    with pytest.raises(ValueError) as excinfo_schema:
-        dataclasses.replace(fit_with_diagnostics, schema_version="1")
-    messages.append(str(excinfo_schema.value))
+    nested_card: dict[str, Any] = to_dict(Scorecard(results=(fake_threshold(),), provenance={}))
+    nested_card["results"][0]["fit"]["schema_version"] = "3"
+    with pytest.raises(ValueError) as excinfo_retired_nested:
+        from_dict(nested_card)
+    messages.append(str(excinfo_retired_nested.value))
+
+    unrecognised = to_dict(fake_threshold())
+    unrecognised["schema_version"] = "999"
+    with pytest.raises(ValueError) as excinfo_unrecognised:
+        from_dict(unrecognised)
+    messages.append(str(excinfo_unrecognised.value))
 
     return messages
 

@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 # Private working material — deliberately not published.
 #
-# marginkit is intended to become a public package, so the planning documents,
+# robustmargin is intended to become a public package, so the planning documents,
 # the agent/tooling setup, and the internal review log stay local. They remain
 # on disk and fully usable; they are simply never committed.
 #

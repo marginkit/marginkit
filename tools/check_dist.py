@@ -33,14 +33,14 @@ def main() -> None:
     wheel, sdist = wheels[0], sdists[0]
 
     names = zipfile.ZipFile(wheel).namelist()
-    assert "marginkit/py.typed" in names, f"py.typed missing from {wheel}"
+    assert "robustmargin/py.typed" in names, f"py.typed missing from {wheel}"
     # Derived from the source tree rather than hardcoded, so a schema_version bump cannot leave
     # this check silently behind.
     expected_schemas = sorted(
-        f"marginkit/schema/{p.name}"
-        for p in pathlib.Path("src/marginkit/schema").glob("scorecard-v*.json")
+        f"robustmargin/schema/{p.name}"
+        for p in pathlib.Path("src/robustmargin/schema").glob("scorecard-v*.json")
     )
-    assert expected_schemas, "no scorecard-v*.json found in src/marginkit/schema"
+    assert expected_schemas, "no scorecard-v*.json found in src/robustmargin/schema"
     for schema in expected_schemas:
         assert schema in names, f"{schema} missing from {wheel}"
 
@@ -58,7 +58,7 @@ def main() -> None:
     if args.expect_version is not None:
         for artifact in (wheel, sdist):
             name = pathlib.Path(artifact).name
-            assert f"marginkit-{args.expect_version}" in name, (
+            assert f"robustmargin-{args.expect_version}" in name, (
                 f"{name} does not carry version {args.expect_version}"
             )
 

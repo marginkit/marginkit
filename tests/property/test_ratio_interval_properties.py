@@ -5,7 +5,7 @@ DoD, on top of the shape/guard/censoring/reference tests elsewhere in this phase
 
 - **Fieller reduces to the classical Wald/delta-method interval as the denominator's own
   uncertainty vanishes (``g -> 0``).** This is a textbook asymptotic fact about the Fieller
-  quadratic itself (worked out in this module's docstring below), not a marginkit-specific
+  quadratic itself (worked out in this module's docstring below), not a robustmargin-specific
   choice, and it is what "Fieller for the ratio" is supposed to degenerate to when the
   denominator is well-determined.
 - **Reciprocal consistency:** ``ratio_interval(b, a)`` is the reciprocal of ``ratio_interval(a,
@@ -37,7 +37,7 @@ randomly generated counts table happens to converge to a chosen variance.
 ``disc = B^2 - A*K -> theta_b^2 * z^2 * Va`` (substitute ``A = theta_b^2`` and expand), so the
 roots ``(B +/- sqrt(disc)) / A -> theta_a/theta_b +/- z*sqrt(Va)/theta_b`` -- exactly the
 classical Wald interval for a ratio with a *known* (non-random) denominator,
-``Var(ratio) = Va / theta_b^2``. This is not marginkit's own ``log_delta`` (which is on the log
+``Var(ratio) = Va / theta_b^2``. This is not robustmargin's own ``log_delta`` (which is on the log
 scale); it is what "Fieller" itself must converge to as the source of Fieller's own extra
 complexity (denominator uncertainty) disappears.
 """
@@ -51,7 +51,7 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from scipy.stats import norm
 
-from marginkit import (
+from robustmargin import (
     Axis,
     Cell,
     Censoring,
@@ -62,7 +62,7 @@ from marginkit import (
     Threshold,
     ratio_interval,
 )
-from marginkit.models import Covariance, Parameter
+from robustmargin.models import Covariance, Parameter
 
 _MAX_EXAMPLES = 100
 _AXIS = Axis(name="severity", unit="unit", scale="log")
@@ -345,7 +345,7 @@ class TestContainmentAcrossShapes:
     ``EXCLUSIVE`` is unreachable through ``ratio_interval()`` in v0.1 (`decisions/0022`): what
     this property swept into that branch before ``0022`` (``A < 0``, ``K > 0``) is ``HALF_OPEN``
     now, so the ``EXCLUSIVE`` arm below is unreachable dead code, kept only because
-    :class:`~marginkit.IntervalShape` still has the member and nothing forbids a future
+    :class:`~robustmargin.IntervalShape` still has the member and nothing forbids a future
     ``dependence="paired"`` result from reaching it (`decisions/0022`'s own consequence).
     """
 
