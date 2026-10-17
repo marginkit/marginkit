@@ -4,12 +4,11 @@
 # ---------------------------------------------------------------------------
 # Private working material — deliberately not published.
 #
-# robustmargin is intended to become a public package, so the planning documents,
-# the agent/tooling setup, and the internal review log stay local. They remain
-# on disk and fully usable; they are simply never committed.
+# This repository is public and is the source of the robustmargin package on PyPI.
+# The planning documents, the agent and tooling setup, and the internal review log
+# stay local: they remain on disk and fully usable, and are never committed.
 #
-# Nothing here was ever committed or pushed, so there is no history to purge.
-# See the note at the bottom of this file before publishing.
+# None of them has ever been committed or pushed, so there is no history to purge.
 # ---------------------------------------------------------------------------
 
 # Claude Code setup: agent definitions, skills, hook wiring, scratch
@@ -37,12 +36,8 @@ docs/*
 !docs/PROVENANCE.md
 
 # ---------------------------------------------------------------------------
-# Before making this repository public, reconsider one of the entries above:
-#
-#   CLAUDE.md and docs/ — IMPLEMENTATION_PLAN §4 lists both as part of the
-#     repository tree, and Phase 1 has creating them as a task. Ignoring them is a
-#     deliberate departure from the plan, not an oversight; update the plan if it
-#     is permanent.
+# Keeping CLAUDE.md and docs/ out of the repository is permanent, not a step to
+# revisit before publishing: the repository is already public.
 # ---------------------------------------------------------------------------
 
 # Python
