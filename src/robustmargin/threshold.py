@@ -71,8 +71,27 @@ class Threshold:
     ``LEFT``. A ``SEPARATION``/``NOT_CONVERGED`` bracket is built from *two* one-sided exact
     bounds, each individually computed at confidence ``(1 + level) / 2``, so their **joint**
     coverage is at least ``level`` -- not merely at least ``2 * level - 1``, the floor that two
-    bounds each at ``level`` would guarantee. A one-sided ``RIGHT``/``LEFT`` bound is genuinely
-    one-sided and stays at ``level`` itself.
+    bounds each at ``level`` would guarantee. Each bound comes from a fixed-sequence scan, not
+    from the most extreme qualifying level anywhere: the lower bound is the last severity in the
+    run of confidently passing nonzero severities ascending from the lowest nonzero severity, the
+    upper bound is the last severity in the run of confidently failing severities descending from
+    the highest, and each scan stops at the first severity that does not qualify (fixed-sequence
+    testing; Hsu & Berger, 1999, *Journal of the American Statistical Association* 94:468-482).
+    Under a monotone curve this keeps each side's error at most ``1 - c`` at confidence ``c``
+    whatever the number of tested levels, at the cost of reporting no bound on a side whose run
+    cannot start. If only one side is determined, it is rescanned the same way at ``level`` and
+    reported alone. A one-sided ``RIGHT``/``LEFT`` bound is genuinely one-sided and stays at
+    ``level`` itself.
+
+    One limitation applies across these results. Five kinds of exact result can be returned: a
+    ``RIGHT`` bound, a ``LEFT`` bound, a bracket, a one-sided lower bound and a one-sided upper
+    bound. For each kind, the probability that ``threshold()`` returns that kind *and* it
+    excludes the true threshold -- the severity where performance crosses the resolved target --
+    is at most ``1 - level``. That is not the probability that a result of that kind, once
+    seen, is wrong. The kinds are also not controlled jointly: which kind is returned depends on
+    the data, so the combined rate of a wrong exact result is bounded only by
+    ``4 * (1 - level)``. In simulation it reached about 8.4% at ``level = 0.95``, when the true
+    performance at tested levels sat just above and just below the target.
 
     Binomial curves are decreasing-only in this release: ``direction="increasing"`` raises, since
     increasing-is-worse outcomes are not yet supported.

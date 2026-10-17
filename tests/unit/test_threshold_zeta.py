@@ -17,6 +17,7 @@ so this file stays a pure snapshot of the real matrix.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import re
 from pathlib import Path
 
@@ -31,6 +32,8 @@ from robustmargin import (
     fit_dose_response,
     threshold,
 )
+from robustmargin.censoring import classify
+from robustmargin.testing import fake_fit
 
 _CSV_PATH = Path(__file__).resolve().parents[1] / "data" / "zeta_matrix_counts.csv"
 _LEVEL = 0.95
@@ -428,3 +431,93 @@ class TestPpoMassSignedAxis:
         assert t.lo is None
         assert t.hi == 0.1
         assert t.interval_method == "exact_bound"
+
+
+class TestRealSeriesReachingTheExactBoundFallbackAreUnchangedByFixedSequenceScans:
+    """``decisions/0028`` replaced the max-anywhere rule for the failed-fit exact bracket with
+    fixed-sequence scans. Where the confidently passing and failing levels are each contiguous
+    from their end, the two rules agree, and every real series here is such data -- so the
+    bounds below are the same under both, and a change to any of them is a behavioural change
+    to the exact bracket, not noise.
+
+    Only series whose fit is a *deterministic* failed fit are run through ``fit_dose_response``:
+    ``sac_sensor_noise`` and ``ppo_sensor_noise`` at ``upper="estimate"`` are ``SEPARATION`` by
+    the pre-fit separation check (asserted in ``test_models_zeta.py``). ``pid_sensor_noise``
+    converges at ``upper=1.0`` and at ``upper="estimate"`` its status is optimiser-dependent, so
+    its real cells are classified against a constructed failed fit instead.
+    """
+
+    def test_ppo_sensor_noise_absolute_0_3_is_a_bracket_between_0_01_and_0_05(self) -> None:
+        """The non-monotone-looking series (57/200 at the control, 143/300 at 0.01, then 0/300
+        twice). At a target of 0.3 the control is undetermined (exact bounds 0.2327 / 0.3422),
+        0.01 confidently passes (lower bound above 0.3) and 0.05 and 0.1 confidently fail: a
+        clean bracket, with no ``NON_MONOTONE: `` contradiction (contrast the 0.4 target in
+        ``TestPpoSensorNoiseNonMonotoneContradiction``, which does contradict)."""
+        obs = _observations_for(
+            "ppo_sensor_noise", axis_name="sensor_noise", axis_unit="m", axis_scale="log"
+        )
+        fit = fit_dose_response(obs, model="binomial", link="probit", upper="estimate", lower=0.0)
+        assert fit.status is Status.SEPARATION
+
+        t = threshold(
+            fit, definition=Definition.absolute(0.3), interval_method="profile", level=_LEVEL
+        )
+
+        assert t.status is Status.SEPARATION
+        assert t.censoring is Censoring.NONE
+        assert t.value is None
+        assert t.lo == 0.01
+        assert t.hi == 0.05
+        assert t.interval_method == "exact_bound"
+        assert t.grid is not None
+        assert not any(w.startswith("NON_MONOTONE: ") for w in t.warnings)
+
+    def test_sac_sensor_noise_absolute_0_5_is_a_one_sided_upper_bound_at_0_01(self) -> None:
+        """Control 98/200 is undetermined against 0.5 (exact bounds 0.4298 / 0.5505) so it ends
+        the run from the top, and 0/300 at 0.01, 0.05 and 0.1 all confidently fail: the run is
+        0.1, 0.05, 0.01. No nonzero level passes, so only the upper side is determined."""
+        obs = _observations_for(
+            "sac_sensor_noise", axis_name="sensor_noise", axis_unit="m", axis_scale="log"
+        )
+        fit = fit_dose_response(obs, model="binomial", link="probit", upper="estimate", lower=0.0)
+        assert fit.status is Status.SEPARATION
+
+        t = threshold(
+            fit, definition=Definition.absolute(0.5), interval_method="profile", level=_LEVEL
+        )
+
+        assert t.status is Status.SEPARATION
+        assert t.censoring is Censoring.NONE
+        assert t.value is None
+        assert t.lo is None
+        assert t.hi == 0.01
+        assert t.interval_method == "exact_bound"
+        assert t.grid is not None
+        assert any("determined only the upper side" in w for w in t.warnings)
+
+    @pytest.mark.parametrize(
+        ("target", "lo", "hi"),
+        [(0.95, 0.01, 0.05), (0.5, 0.01, 0.05), (0.3, 0.05, 0.1)],
+        ids=["absolute_0.95", "absolute_0.5", "absolute_0.3"],
+    )
+    @pytest.mark.parametrize("status", [Status.SEPARATION, Status.NOT_CONVERGED])
+    def test_pid_sensor_noise_cells_on_a_failed_fit_give_the_same_bracket(
+        self, status: Status, target: float, lo: float, hi: float
+    ) -> None:
+        """The cleanest real series (200/200, 299/300, 122/300, 0/300): passes then fails with
+        no undetermined level in between at 0.95 and 0.5, and with 0.01 and 0.05 both passing
+        and only 0.1 failing at 0.3. Classified against a failed fit carrying exactly these
+        cells (``classify`` reads only ``status`` and ``cells``)."""
+        obs = _observations_for(
+            "pid_sensor_noise", axis_name="sensor_noise", axis_unit="m", axis_scale="log"
+        )
+        failed = dataclasses.replace(fake_fit(status=status, monotonicity=None), cells=obs.cells())
+
+        result = classify(failed, target=target, level=_LEVEL)
+
+        assert result.status is status
+        assert result.censoring is Censoring.NONE
+        assert result.lo == lo
+        assert result.hi == hi
+        assert result.warnings == ()
+        assert result.grid is not None

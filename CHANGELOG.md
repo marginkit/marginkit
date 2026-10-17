@@ -104,6 +104,29 @@ no reported number moved.
   `ValueError` saying a dose-response curve needs at least one severity level besides the control.
   It previously raised an unexplained numpy error, or, when an asymptote was estimated, returned
   `NOT_CONVERGED`.
+- **Behavioural change: the exact bounds `threshold()` reports for a failed fit
+  (`SEPARATION`/`NOT_CONVERGED`) now meet their stated confidence** (`decisions/0028`).
+  - Before, the lower bound was the highest tested severity anywhere that confidently passed, and
+    the upper bound the lowest that confidently failed. When several tested levels sat close to
+    the target, that undercovered: in simulation, up to 13.6% of two-sided brackets and 28% of
+    one-sided bounds excluded the true threshold, against a claimed 5% at `level=0.95`.
+  - Each side now comes from a fixed-sequence scan. The lower bound comes from the run of
+    confidently passing levels upward from the lowest nonzero severity, and the upper bound from
+    the run of confidently failing levels downward from the highest. Each run stops at the first
+    level that does not qualify.
+  - Results are identical when the passing and failing levels are each contiguous from their end.
+    Otherwise a bound can move outwards, a bracket can become one-sided, or no bounds are
+    reported.
+  - Converged fits, `RIGHT`, `LEFT`, `FAILS_AT_BASELINE`, the monotonicity-contradiction check and
+    the grid value are unchanged.
+  - Known limitation, now documented on `Threshold`. There are five kinds of exact result:
+    `RIGHT`, `LEFT`, a bracket, a one-sided lower bound and a one-sided upper bound. For each,
+    the chance that it is returned *and* excludes the true threshold is at most `1 - level`.
+    Which kind is returned depends on the data, so the combined rate is bounded only by
+    `4 * (1 - level)`. In simulation it reached about 8.4% at `level=0.95`.
+  - The one-sided fallback warning now names the confidence at which the other side was
+    missing, the bracket confidence `(1 + level) / 2`, and says the reported side was
+    rescanned at `level`. It previously named only `level`, where the missing side can exist.
 
 # Released as marginkit
 
