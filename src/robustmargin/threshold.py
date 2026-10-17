@@ -1,7 +1,7 @@
-"""The threshold result (§5.5) and :func:`threshold`, which solves for one (§5.3-§5.5).
+"""The threshold result and :func:`threshold`, which solves for one.
 
-:func:`threshold` resolves the target performance for a :class:`~robustmargin.Definition`
-(`decisions/0008`), classifies the fit against it (:mod:`robustmargin.censoring`), and -- when the
+:func:`threshold` resolves the target performance for a :class:`~robustmargin.Definition`,
+classifies the fit against it (:mod:`robustmargin.censoring`), and -- when the
 classification says to -- solves the closed form and runs the requested interval method
 (:mod:`robustmargin.intervals`). ``interval_method`` is a *request*: every censored or failed
 result records ``"exact_bound"`` regardless of what was asked for, because that is the method
@@ -62,23 +62,42 @@ def _check_value(value: float | None, *, label: str, scale: str) -> None:
 @dataclass(frozen=True, kw_only=True)
 class Threshold:
     """Where a fitted curve crosses a target performance, with a confidence interval, or an
-    explicit record of why no value is reported (§5.5).
+    explicit record of why no value is reported.
 
     Every censoring rule below assumes the **true** performance curve is monotone in severity
     (the fitted curve, being drawn from a monotone parametric family, is monotone by
     construction regardless). A ``RIGHT`` bound reads "threshold > lo (one-sided, exact,
     monotonicity assumed)", never as a value on its own; the mirrored reading applies to
     ``LEFT``. A ``SEPARATION``/``NOT_CONVERGED`` bracket is built from *two* one-sided exact
-    bounds, each individually computed at confidence ``(1 + level) / 2`` (`decisions/0009`), so
-    their **joint** coverage is at least ``level`` -- not, as an earlier draft of this docstring
-    said, at least ``2 * level - 1`` from two bounds each at ``level``. A one-sided ``RIGHT``/
-    ``LEFT`` bound is genuinely one-sided and stays at ``level`` itself.
+    bounds, each individually computed at confidence ``(1 + level) / 2``, so their **joint**
+    coverage is at least ``level`` -- not merely at least ``2 * level - 1``, the floor that two
+    bounds each at ``level`` would guarantee. Each bound comes from a fixed-sequence scan, not
+    from the most extreme qualifying level anywhere: the lower bound is the last severity in the
+    run of confidently passing nonzero severities ascending from the lowest nonzero severity, the
+    upper bound is the last severity in the run of confidently failing severities descending from
+    the highest, and each scan stops at the first severity that does not qualify (fixed-sequence
+    testing; Hsu & Berger, 1999, *Journal of the American Statistical Association* 94:468-482).
+    Under a monotone curve this keeps each side's error at most ``1 - c`` at confidence ``c``
+    whatever the number of tested levels, at the cost of reporting no bound on a side whose run
+    cannot start. If only one side is determined, it is rescanned the same way at ``level`` and
+    reported alone. A one-sided ``RIGHT``/``LEFT`` bound is genuinely one-sided and stays at
+    ``level`` itself.
 
-    Binomial curves are decreasing-only in this release: ``direction="increasing"`` raises,
-    pending owner decision D5.
+    One limitation applies across these results. Five kinds of exact result can be returned: a
+    ``RIGHT`` bound, a ``LEFT`` bound, a bracket, a one-sided lower bound and a one-sided upper
+    bound. For each kind, the probability that ``threshold()`` returns that kind *and* it
+    excludes the true threshold -- the severity where performance crosses the resolved target --
+    is at most ``1 - level``. That is not the probability that a result of that kind, once
+    seen, is wrong. The kinds are also not controlled jointly: which kind is returned depends on
+    the data, so the combined rate of a wrong exact result is bounded only by
+    ``4 * (1 - level)``. In simulation it reached about 8.4% at ``level = 0.95``, when the true
+    performance at tested levels sat just above and just below the target.
 
-    Invariants enforced in ``__post_init__`` (§5.5's table, plus the fit-status and ordering
-    rules the stats review added):
+    Binomial curves are decreasing-only in this release: ``direction="increasing"`` raises, since
+    increasing-is-worse outcomes are not yet supported.
+
+    Invariants enforced in ``__post_init__`` (the censoring table, plus the fit-status and
+    ordering rules):
 
     - ``status`` in ``{UNREACHABLE, CONTROL_INCOMPATIBLE, FAILS_AT_BASELINE}``: ``value``,
       ``lo`` and ``hi`` are all ``None``; ``censoring`` is ``NONE``; ``interval_method`` is
@@ -87,7 +106,7 @@ class Threshold:
       because the control already fails.
     - ``status`` in ``{SEPARATION, NOT_CONVERGED}``: ``value`` is ``None``; ``censoring`` is one
       of ``{NONE, RIGHT, LEFT}``; ``interval_method`` is ``"exact_bound"``; ``lo`` and ``hi``
-      may be set, as the exact-bound fallback described in §5.2.
+      may be set, as the exact-bound fallback.
     - ``censoring == RIGHT``: ``value`` is ``None``, ``lo`` is set, ``hi`` is ``None``,
       ``interval_method == "exact_bound"``.
     - ``censoring == LEFT``: ``value`` is ``None``, ``hi`` is set, ``lo`` is ``None``,
@@ -112,7 +131,7 @@ class Threshold:
     axis
         The :class:`~robustmargin.Axis` this threshold was solved on. Must equal ``fit.axis``.
     definition
-        Which target performance this threshold solves for (§5.3).
+        Which target performance this threshold solves for.
     direction
         ``"decreasing"`` only, in this release (see above). Carried over from ``fit``.
     value
@@ -131,17 +150,17 @@ class Threshold:
         The :class:`~robustmargin.Status` of this threshold.
     dependence
         ``"independent"`` in this release. Required, with no default: a threshold built from
-        clustered data must say so explicitly rather than silently assuming independence (R2).
+        clustered data must say so explicitly rather than silently assuming independence.
     fit
         The :class:`~robustmargin.Fit` this threshold was solved from. Per-level trial counts
-        (R10) live on ``fit.cells``, not on a separate field.
+        live on ``fit.cells``, not on a separate field.
     warnings
         Free-text notes surfaced alongside the threshold. Empty by default. Carries a
-        ``"NON_MONOTONE_DATA: "``-prefixed entry whenever ``fit.monotonicity.any_flagged``
-        (`decisions/0023` "Amendment 1"), whatever ``status``/``censoring`` turn out to be --
-        distinct from :mod:`robustmargin.censoring`'s own ``"NON_MONOTONE: "`` token, which compares
-        exact one-sided bounds against the *fitted* curve rather than testing raw adjacent
-        levels; the two may disagree and both are reported when they fire.
+        ``"NON_MONOTONE_DATA: "``-prefixed entry whenever ``fit.monotonicity.any_flagged``,
+        whatever ``status``/``censoring`` turn out to be -- distinct from
+        :mod:`robustmargin.censoring`'s own ``"NON_MONOTONE: "`` token, which compares exact
+        one-sided bounds against the *fitted* curve rather than testing raw adjacent levels; the two
+        may disagree and both are reported when they fire.
     schema_version
         The serialised-result schema version this object belongs to. Defaults to ``"4"``, the
         only version ``from_dict`` reads; ``"1"``, ``"2"`` and ``"3"`` (the card format of this
@@ -151,12 +170,10 @@ class Threshold:
         robustmargin stores it and never interprets it. Empty by default.
     baseline
         The zero-severity control's exact rate, set exactly when ``status`` is
-        ``FAILS_AT_BASELINE`` (`decisions/0010`); ``None`` otherwise. Appended field, additive
-        under schema ``"1"``.
+        ``FAILS_AT_BASELINE``; ``None`` otherwise.
     grid
         The grid break-point value computed as part of the ``SEPARATION``/``NOT_CONVERGED``
-        exact-bound fallback, set exactly on that path (`decisions/0010`); ``None`` otherwise.
-        Appended field, additive under schema ``"1"``.
+        exact-bound fallback, set exactly on that path; ``None`` otherwise.
     """
 
     axis: Axis
@@ -328,8 +345,8 @@ class Threshold:
             # (`OPEN_UPPER`/`OPEN_LOWER` each require their closed side to exist). Reporting the
             # estimate with no bounds, and the reason in `warnings`, is the honest encoding;
             # inventing a bound at the search limit would not be. Loosening an invariant is a
-            # Safe change (`docs/CONSUMERS.md`), but a card that relies on it needs a reader at
-            # least as new as the writer (`ARCHITECTURE.md` A9).
+            # safe (additive) change, but a card that relies on it needs a reader at least as
+            # new as the writer.
             if self.value is None:
                 raise ValueError(
                     "Threshold.value must be set when censoring is NONE and status is OK"
@@ -354,9 +371,9 @@ class Threshold:
                     f"NONE and status is OK, got {self.interval_method!r}"
                 )
 
-        # decisions/0010: baseline/grid only ever *tighten* -- an existing invariant above is
-        # never weakened to admit them. Each is legal only alongside the status it documents;
-        # neither is required by that status (a threshold predating Phase 5 has both `None`).
+        # baseline/grid only ever *tighten* -- an existing invariant above is never weakened to
+        # admit them. Each is legal only alongside the status it documents; neither is required
+        # by that status (a threshold built without them has both `None`).
         if self.baseline is not None and self.status is not Status.FAILS_AT_BASELINE:
             raise ValueError(
                 "Threshold.baseline may only be set when status is FAILS_AT_BASELINE, got "
@@ -381,8 +398,8 @@ def _control_cell_or_none(fit: Fit) -> Cell | None:
 
 
 def _resolve_target(definition: Definition, *, fit: Fit) -> tuple[float, str | None]:
-    """The already-resolved target performance ``P*`` (plan §5.3) plus an optional warning
-    naming where an asymptote came from (`decisions/0008`).
+    """The already-resolved target performance ``P*`` plus an optional warning naming where an
+    asymptote came from.
 
     ``absolute(a)`` never needs an asymptote at all: ``P* = a``. ``baseline_fraction(p)`` and
     ``relative(p)`` need ``upper`` (and, for ``relative``, ``lower``): the fitted values when
@@ -401,14 +418,15 @@ def _resolve_target(definition: Definition, *, fit: Fit) -> tuple[float, str | N
         warning = None
     else:
         if definition.kind == "relative":
-            # `relative(p)` needs BOTH asymptotes: `P* = u - p*(u - l)`. `decisions/0008` says
-            # where `u` comes from when the fit failed (the control cell's observed rate) and
-            # says nothing about `l`, because nothing in the data speaks to a lower asymptote.
+            # `relative(p)` needs BOTH asymptotes: `P* = u - p*(u - l)`. When the fit failed,
+            # `u` comes from the control cell's observed rate, but there is no source for `l`,
+            # because nothing in the data speaks to a lower asymptote.
             # Substituting `l = 0` would silently turn `relative(p)` into
             # `baseline_fraction(1 - p)` and, whenever the true floor is above zero, aim at a
             # target that is easier to clear -- an optimistic threshold produced on a failed
-            # fit, which is the case hard constraint 3 exists for. Refuse instead, as this
-            # function already refuses when there is no control cell to supply `u`.
+            # fit by an assumption nothing in the data supports, with no warning naming it.
+            # Refuse instead, as this function already refuses when there is no control cell to
+            # supply `u`.
             raise ValueError(
                 f"threshold: definition.kind='relative' needs both asymptotes to resolve a "
                 f"target, and fit.status is {fit.status!r} (no fitted asymptotes). There is no "
@@ -446,11 +464,11 @@ def threshold(
     dependence: str | None = None,
 ) -> Threshold:
     """Solve for where ``fit``'s curve crosses ``definition``'s target performance, with a
-    confidence interval, or report why no value exists (plan §4, §5.3-§5.5).
+    confidence interval, or report why no value exists.
 
     ``interval_method`` is a *request*, not a promise: every censored or failed result records
     ``"exact_bound"`` regardless of what was requested, because that is the method that actually
-    produced its numbers (§5.2, §5.5). The order in which the outcomes below are checked is
+    produced its numbers. The order in which the outcomes below are checked is
     :mod:`robustmargin.censoring`'s module docstring, not this one's.
 
     Parameters
@@ -458,16 +476,16 @@ def threshold(
     fit
         The fit to solve a threshold from.
     definition
-        Which target performance to solve for (§5.3).
+        Which target performance to solve for.
     interval_method
-        ``"profile"`` (primary, §5.4) or ``"delta"`` (cross-check). Required, with no default.
+        ``"profile"`` (primary) or ``"delta"`` (cross-check). Required, with no default.
     level
         The confidence level, strictly between 0 and 1.
     dependence
         ``None`` (the default) resolves to ``"independent"`` unless ``fit.cluster_ids`` is set,
-        in which case omitting it raises (R2: a method assuming independence must refuse
-        clustered input unless the caller explicitly opts in). ``"independent"`` may always be
-        passed explicitly. ``"paired"`` raises, naming that it is v0.2 Phase 9 work. The
+        in which case omitting it raises (a method assuming independence must refuse clustered
+        input unless the caller explicitly opts in). ``"independent"`` may always be passed
+        explicitly. ``"paired"`` raises, naming that it is not implemented in this release. The
         resulting ``Threshold.dependence`` is always ``"independent"`` in this release.
 
     Returns
@@ -481,8 +499,7 @@ def threshold(
         ``fit.cluster_ids`` is set, or is any value other than ``None``/``"independent"``/
         ``"paired"``; if ``dependence="paired"`` is requested (not yet implemented); or if
         ``definition.kind`` is ``"baseline_fraction"``/``"relative"``, ``fit.status`` is not
-        ``OK``, and no zero-severity control cell exists to resolve a target from
-        (`decisions/0008`).
+        ``OK``, and no zero-severity control cell exists to resolve a target from.
     """
     if interval_method not in _VALID_INTERVAL_METHOD_REQUESTS:
         raise ValueError(
@@ -508,15 +525,15 @@ def threshold(
         raise ValueError(
             "threshold: fit carries cluster ids (fit.cluster_ids is set); a method that assumes "
             "independence must not run on clustered data unless the caller passes "
-            "dependence='independent' explicitly (R2)"
+            "dependence='independent' explicitly"
         )
 
     target, target_warning = _resolve_target(definition, fit=fit)
     collected_warnings: list[str] = [] if target_warning is None else [target_warning]
 
-    # decisions/0023 Amendment 1, item 7: applies whatever the resulting censoring or status,
-    # because every threshold rule and every fitted model assume the true performance curve is
-    # monotone in severity. Never changes value/lo/hi/status/censoring -- only adds a warning.
+    # Applies whatever the resulting censoring or status, because every threshold rule and every
+    # fitted model assume the true performance curve is monotone in severity. Never changes
+    # value/lo/hi/status/censoring -- only adds a warning.
     if fit.monotonicity is not None and fit.monotonicity.any_flagged:
         flagged_pairs = ", ".join(
             f"({pair.severity_low!r}, {pair.severity_high!r})"
@@ -537,10 +554,9 @@ def threshold(
         if value <= 0.0:
             # A linear axis can solve to a crossing at or below zero severity. v0.1 severity is
             # non-negative (`Threshold` enforces it), so such a crossing is not reachable on the
-            # axis as tested. This is `REVIEWS.md` R6 #4, decided during Phase 5: report it as
-            # UNREACHABLE with a warning that names the solved value, so it is distinguishable
-            # from the asymptote-driven UNREACHABLE of `decisions/0008`. Allowing negative
-            # thresholds later is a loosening, and therefore safe.
+            # axis as tested. It is reported as UNREACHABLE with a warning that names the solved
+            # value, so it is distinguishable from the asymptote-driven UNREACHABLE. Allowing
+            # negative thresholds later is a loosening, and therefore safe.
             collected_warnings.append(
                 "threshold: the fitted curve is already below the target at severity 0 -- it "
                 f"crosses at {value!r}, at or below the axis origin, so on this axis the "

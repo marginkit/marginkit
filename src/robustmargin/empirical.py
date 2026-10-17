@@ -4,9 +4,9 @@
 ``robustness/cards.py::break_point`` (commit ``435fc2793b2afdb8404099c83b0c36a71d9ffba9``,
 PR #17): the smallest tested severity magnitude at which performance falls strictly below a
 criterion, or an explicit right-censored result when no tested level fails. See
-``docs/PROVENANCE.md`` for which conventions were carried over, what was deliberately changed
-(empty input, non-finite values, and unsigned negative severities now raise rather than
-returning a silent fallback), and why.
+https://github.com/robustmargin/robustmargin/blob/main/docs/PROVENANCE.md for which conventions
+were carried over, what was deliberately changed (empty input, non-finite values, and unsigned
+negative severities now raise rather than returning a silent fallback), and why.
 
 This module holds only the grid rule, which is the part ported from zeta-bench. Model-based
 dose-response estimation is new work, not a port, and lives in the other modules of this
@@ -186,12 +186,12 @@ def _check_rate(value: float, *, label: str) -> None:
 @dataclass(frozen=True, kw_only=True)
 class BaselineRate:
     """The zero-severity control's exact rate, attached to a :class:`~robustmargin.Threshold` whose
-    ``status`` is :data:`~robustmargin.Status.FAILS_AT_BASELINE` (`decisions/0010`).
+    ``status`` is :data:`~robustmargin.Status.FAILS_AT_BASELINE`.
 
     Serialisable (unlike :class:`ExactRates`): a single control cell's rate, labelled with the
-    method it came from, is exactly what plan section 5.5 asks a ``FAILS_AT_BASELINE`` result to
-    report, and putting it in its own field keeps it out of ``Threshold.lo``/``.hi`` (plan
-    section 5.4 forbids attaching a per-cell exact rate to a threshold).
+    method it came from, is exactly what a ``FAILS_AT_BASELINE`` result should report, and putting
+    it in its own field keeps it out of ``Threshold.lo``/``.hi`` (a per-cell exact rate is never
+    attached to a threshold).
 
     Attributes
     ----------
@@ -202,11 +202,10 @@ class BaselineRate:
     rate
         ``successes / trials``.
     lo, hi
-        The **two-sided** exact (Clopper-Pearson) interval at ``level``, as plan section 5.4
-        specifies for a reported per-cell rate. This is deliberately not the one-sided bound
-        that decided the ``FAILS_AT_BASELINE`` classification: that asks "does this cell
-        provably fail the target", a one-sided question, while this describes where the control
-        rate lies.
+        The **two-sided** exact (Clopper-Pearson) interval at ``level``, as is specified for a
+        reported per-cell rate. This is deliberately not the one-sided bound that decided the
+        ``FAILS_AT_BASELINE`` classification: that asks "does this cell provably fail the
+        target", a one-sided question, while this describes where the control rate lies.
     level
         The confidence of that interval. Carried here so the number is self-describing in a
         stored card rather than requiring a reader to look at the enclosing ``Threshold``.
@@ -255,12 +254,12 @@ class BaselineRate:
 
 @dataclass(frozen=True, kw_only=True)
 class ExactRates:
-    """Per-cell exact (Clopper-Pearson-style) rate bounds for every cell in a fit (plan section
-    5.4), read directly from :attr:`robustmargin.Fit.cells`.
+    """Per-cell exact (Clopper-Pearson-style) rate bounds for every cell in a fit, read directly
+    from :attr:`robustmargin.Fit.cells`.
 
     **Deliberately not serialisable.** This type is excluded from ``report.py``'s tagged classes
     and has no schema entry: ``report.to_dict`` raises ``TypeError`` on it. That is what
-    structurally enforces plan section 5.4's "never attach [per-cell rates] to a threshold" --
+    structurally enforces the rule that per-cell rates are never attached to a threshold --
     there is no JSON shape for a caller to smuggle one into.
 
     Attributes
@@ -268,8 +267,7 @@ class ExactRates:
     severity, rate, lo, hi
         Parallel tuples, one entry per input cell, in the same order.
     level
-        The confidence of the two-sided exact interval each ``lo``/``hi`` pair was computed at
-        (plan section 5.4).
+        The confidence of the two-sided exact interval each ``lo``/``hi`` pair was computed at.
     method
         Always ``"per_cell_clopper_pearson"``.
     """
@@ -312,18 +310,17 @@ class ExactRates:
 
 
 def per_cell_clopper_pearson(cells: Sequence[Cell], *, level: float = 0.95) -> ExactRates:
-    """The exact (Clopper-Pearson) rate and bounds for each cell in ``cells``, independently
-    (plan section 5.4, ROADMAP section 3.1).
+    """The exact (Clopper-Pearson) rate and bounds for each cell in ``cells``, independently.
 
     Each cell's ``lo``/``hi`` are the **two-sided** exact interval at ``level``, putting
-    ``(1 - level) / 2`` in each tail -- plan section 5.4 defines a reported per-cell rate as
+    ``(1 - level) / 2`` in each tail -- a reported per-cell rate is defined as
     ``binomtest(k, n).proportion_ci(confidence_level=..., method="exact")``, which is two-sided.
 
     That is deliberately **not** :func:`robustmargin.censoring.exact_one_sided_bound`, which
     answers the different, one-sided question a censoring classification asks ("does this cell
     provably fail the target?"). The two coexist on purpose and must not be conflated: reporting
     the one-sided pair under this function's name would label a roughly ``2 * level - 1`` region
-    as ``level``, which is the mislabelling `decisions/0009` exists to prevent.
+    as ``level``, which is the mislabelling this separation exists to prevent.
 
     Parameters
     ----------
@@ -331,7 +328,7 @@ def per_cell_clopper_pearson(cells: Sequence[Cell], *, level: float = 0.95) -> E
         The cells to compute rates for, typically ``fit.cells`` directly.
     level
         The confidence of the **two-sided** Clopper-Pearson interval, strictly between 0 and 1.
-        Defaults to ``0.95``. Plan section 5.4 defines a reported per-cell rate as
+        Defaults to ``0.95``. A reported per-cell rate is defined as
         ``binomtest(k, n).proportion_ci(confidence_level=..., method="exact")``, which is
         two-sided -- *not* the one-sided bound that decides a censoring classification. For
         that, see ``robustmargin.censoring.exact_one_sided_bound``.
@@ -340,8 +337,7 @@ def per_cell_clopper_pearson(cells: Sequence[Cell], *, level: float = 0.95) -> E
     -------
     ExactRates
         Parallel arrays, one entry per cell, in the given order. **Never attach this to a
-        threshold** (plan section 5.4); it is deliberately not serialisable (see
-        :class:`ExactRates`).
+        threshold**; it is deliberately not serialisable (see :class:`ExactRates`).
     """
     severity = tuple(c.severity for c in cells)
     rate = tuple(c.successes / c.trials for c in cells)

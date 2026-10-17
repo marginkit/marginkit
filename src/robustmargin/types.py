@@ -1,7 +1,7 @@
 """robustmargin's shared vocabulary for severity and outcome data.
 
 ``Censoring`` is the model-based and grid-rule censoring classification (documented on the
-class itself). Everything else here is new to robustmargin as of Phase 3: ``Axis`` describes the
+class itself). Everything else here is new to robustmargin: ``Axis`` describes the
 severity axis a series of observations was measured on; ``Observations`` holds the raw
 aggregated-or-per-observation data a fit is built from; ``Definition`` names which of three
 target-performance definitions a threshold solves for; ``Cell`` is one pooled row of counts at
@@ -89,26 +89,25 @@ class Status(StrEnum):
     Attributes
     ----------
     OK
-        The fit converged and the threshold, if any, was solved for. Plan §5.1-5.2.
+        The fit converged and the threshold, if any, was solved for.
     SEPARATION
         The data are completely or quasi-completely separated: some or all outcomes are
         perfectly predicted by severity, so the likelihood has no finite maximum on at least
         one parameter. No model-based interval is produced; a threshold built from this fit
-        falls back to the exact censoring bound (§5.2, §5.5).
+        falls back to the exact censoring bound.
     NOT_CONVERGED
         The optimizer did not converge, or converged to a point where the Hessian is not
-        positive-definite. Same fallback as ``SEPARATION`` (§5.2, §5.5).
+        positive-definite. Same fallback as ``SEPARATION``.
     UNREACHABLE
         The target performance implied by a threshold's ``Definition`` lies outside the fitted
-        curve's range (at or beyond one of the asymptotes), so no severity solves for it (§5.3,
-        §5.5).
+        curve's range (at or beyond one of the asymptotes), so no severity solves for it.
     FAILS_AT_BASELINE
         The zero-severity control's exact one-sided bound already fails the criterion: the
-        threshold does not exist because the system was never passing to begin with (§5.5).
+        threshold does not exist because the system was never passing to begin with.
     CONTROL_INCOMPATIBLE
         The upper asymptote is fixed (commonly at 1) but the zero-severity control has
         failures, which drives the likelihood to zero for that fixed value. Refit with
-        ``upper="estimate"`` (§5.1).
+        ``upper="estimate"``.
     """
 
     OK = "OK"
@@ -125,36 +124,35 @@ class IntervalShape(StrEnum):
 
     A Fieller interval for the ratio of two normal-ish quantities is not always a bounded
     interval; which shape it takes depends on how much relative uncertainty the denominator
-    threshold carries (§5.6).
+    threshold carries.
 
     Attributes
     ----------
     BOUNDED
         The usual case: ``[lo, hi]``, a single closed interval. Also covers a Fieller set bounded
         above but not below on its own: intersected with the positive parameter space that is
-        ``[0, hi]``, and ``0`` is a true lower bound for a severity ratio (`decisions/0019`), so
-        ``BOUNDED`` -- never ``HALF_OPEN`` -- is reported (`decisions/0022`: "the upper-only
-        geometry stays ``BOUNDED``"). ``HALF_OPEN`` is therefore always lower-bounded, never
-        upper-bounded, and that asymmetry is deliberate.
+        ``[0, hi]``, and ``0`` is a true lower bound for a severity ratio, so ``BOUNDED`` --
+        never ``HALF_OPEN`` -- is reported (the upper-only geometry stays ``BOUNDED``).
+        ``HALF_OPEN`` is therefore always lower-bounded, never upper-bounded, and that asymmetry
+        is deliberate.
     UNBOUNDED
         The confidence set, intersected with the positive parameter space, is the whole of
         ``(0, inf)``; ``lo`` and ``hi`` are both ``None``.
     EXCLUSIVE
         Two disjoint rays, ``(-inf, lo] union [hi, inf)``, with both ``lo`` and ``hi`` on the
-        same side of zero (both negative is `decisions/0021`'s ``UNBOUNDED`` case; a positive
-        ``lo`` never arises under ``dependence="independent"``, `decisions/0022`). **Unreachable
-        in v0.1**: under ``dependence="independent"`` the covariance term is 0, which forces
-        opposite-signed roots whenever this branch's other conditions hold, so the real result is
-        always ``HALF_OPEN`` instead (`decisions/0022`). The member and
-        :class:`~robustmargin.Ratio`'s invariants for it stay enforced against v0.2's
-        ``dependence="paired"``, which can make the covariance term nonzero and reach this shape
-        for the first time.
+        same side of zero (both negative is the ``UNBOUNDED`` case; a positive ``lo`` never
+        arises under ``dependence="independent"``). **Unreachable in v0.1**: under
+        ``dependence="independent"`` the covariance term is 0, which forces opposite-signed roots
+        whenever this branch's other conditions hold, so the real result is always ``HALF_OPEN``
+        instead. The member and :class:`~robustmargin.Ratio`'s invariants for it stay enforced
+        against v0.2's ``dependence="paired"``, which can make the covariance term nonzero and
+        reach this shape for the first time.
     HALF_OPEN
-        One ray, ``[lo, inf)``: ``lo`` is set, ``hi`` is ``None``. This is what plan §5.6's
-        original two-ray ``EXCLUSIVE`` case actually is once intersected with the positive
-        parameter space. It arises whenever the denominator threshold is poorly determined
-        (``z^2*Vb > theta_b^2``) while the numerator is not -- an open region of the parameter
-        space, not the measure-zero boundary `decisions/0017` assumed (`decisions/0022`).
+        One ray, ``[lo, inf)``: ``lo`` is set, ``hi`` is ``None``. This is what a two-ray
+        Fieller set with ``K > 0`` is once intersected with the positive parameter space. It arises
+        whenever the denominator threshold is poorly determined (``z^2*Vb > theta_b^2``) while
+        the numerator is not -- an open region of the parameter space, not a measure-zero
+        boundary.
     """
 
     BOUNDED = "BOUNDED"
@@ -206,9 +204,9 @@ class Axis:
         A short, non-empty, domain-neutral name for the axis (for example ``"sensor_noise"``).
     unit
         The unit severity is expressed in (for example ``"m"``). Non-empty. A ratio between two
-        thresholds is allowed only when both axes match on ``name`` and ``unit`` (R5).
+        thresholds is allowed only when both axes match on ``name`` and ``unit``.
     scale
-        Either ``"log"`` or ``"linear"``: which scale the dose-response model is fit on (§5.1).
+        Either ``"log"`` or ``"linear"``: which scale the dose-response model is fit on.
     citation
         An optional free-text citation for where the axis or its unit convention comes from (for
         example a datasheet reference). ``None`` by default; if given, must be non-empty.
@@ -234,7 +232,7 @@ class Axis:
 
 @dataclass(frozen=True, kw_only=True)
 class Definition:
-    """Which target performance a threshold solves for (§5.3).
+    """Which target performance a threshold solves for.
 
     Three definitions are in play, and they coincide only when the fitted curve's asymptotes
     are exactly 1 and 0:
@@ -244,7 +242,7 @@ class Definition:
       time (:data:`Status.UNREACHABLE`), not at construction time, so any finite ``a`` --
       including one that looks out of range, such as 1.5 -- constructs successfully.
     - ``baseline_fraction(p)``: performance falls to ``p`` times the performance at zero
-      severity (ROADMAP §3.1). Requires ``0 < p < 1``.
+      severity. Requires ``0 < p < 1``.
     - ``relative(p)``: a fraction ``p`` of the fitted dynamic range (upper minus lower
       asymptote) is lost (R ``drc``'s ``type = "relative"``). Requires ``0 < p < 1``.
 
@@ -299,7 +297,7 @@ def _check_counts(
 
     ``successes`` and ``trials`` each accept a whole-number ``float`` (for example ``200.0``)
     as well as a genuine ``int``: a JSON-Schema "integer" cannot tell ``200.0`` from ``200``, so
-    both direct construction and ``from_dict`` must accept it (round 4 section 2). A bool or a
+    both direct construction and ``from_dict`` must accept it. A bool or a
     non-whole float (``2.5``) still raises. The coerced ``int`` values are what gets stored on
     the dataclass, never the original float, so ``type(cell.successes) is int`` always holds.
     """
@@ -354,12 +352,12 @@ class Cell:
 @dataclass(frozen=True, kw_only=True)
 class Observations:
     """Raw severity/outcome data for one series, either aggregated counts or per-observation
-    rows -- both stored the same way, with each per-observation row as ``trials=1`` (R1).
+    rows -- both stored the same way, with each per-observation row as ``trials=1``.
 
     Severity is non-negative: a signed axis (for example a bidirectional mass offset) is split
-    by the caller into two ``Observations``, one per side (R6). On a log axis, a severity of
-    exactly ``0.0`` is the zero-severity control; it is handled in the fitted likelihood
-    (§5.1), never by taking ``log(0)`` and never by an epsilon substitute (R3).
+    by the caller into two ``Observations``, one per side. On a log axis, a severity of
+    exactly ``0.0`` is the zero-severity control; it is handled in the fitted likelihood,
+    never by taking ``log(0)`` and never by an epsilon substitute.
 
     Attributes
     ----------
@@ -367,8 +365,8 @@ class Observations:
         The :class:`Axis` this series was measured on.
     outcome
         A short, non-empty, domain-neutral name for what "success" means (for example
-        ``"success"`` or ``"consistent"``). Required, with no default (design choice 2): a
-        wrong default would silently flip a threshold.
+        ``"success"`` or ``"consistent"``). Required, with no default: a wrong default would
+        silently flip a threshold.
     direction
         Either ``"decreasing"`` (performance falls as severity rises) or ``"increasing"``.
         Required, with no default, for the same reason as ``outcome``.
@@ -385,8 +383,8 @@ class Observations:
     cluster
         Optional cluster ids, one per row, each a ``str`` or non-bool ``int`` (never ``None``
         or a ``bool``). Any method assuming independence must refuse clustered input unless the
-        caller explicitly asks for it (R2); ``Observations`` itself never drops or ignores
-        these ids.
+        caller explicitly asks for it; ``Observations`` itself never drops or ignores these
+        ids.
     """
 
     axis: Axis
@@ -423,7 +421,7 @@ class Observations:
 
         # ``_check_counts`` rejects a bool or non-finite severity, and accepts a whole-number
         # float for successes/trials (for example ``200.0``) the same way direct ``Cell``
-        # construction does (round 4 sections 1-2), coercing both to ``int`` for storage.
+        # construction does, coercing both to ``int`` for storage.
         coerced_successes: list[int] = []
         coerced_trials: list[int] = []
         for severity, successes, trials in zip(

@@ -1,31 +1,34 @@
 """The dose-response fit result, its fitting entry point, and prediction.
 
-As of ``0.1.0a2`` this module holds :class:`Fit`, the two small dataclasses it embeds
-(:class:`Parameter`, :class:`Covariance`), :func:`fit_dose_response`, and :class:`Prediction`
-(:meth:`Fit.predict`'s return type). Two fitting paths exist (plan §5.1, D7 ``decisions/0004``):
-statsmodels ``GLM`` when both asymptotes are fixed at exactly ``1.0``/``0.0``, and
-``statsmodels.base.model.GenericLikelihoodModel`` -- given a likelihood function, never a
-hand-rolled optimizer or IRLS loop -- otherwise. A fit with no interior maximum (wrong-sign
-slope, or an estimated asymptote pinned to a parameter-space boundary) is reported as
-``Status.NOT_CONVERGED`` with the reason in ``Fit.warnings``, never as a number that happens to
-be where the optimizer stopped (``decisions/0005``).
+This module holds :class:`Fit`, the two small dataclasses it embeds (:class:`Parameter`,
+:class:`Covariance`), :func:`fit_dose_response`, and :class:`Prediction` (:meth:`Fit.predict`'s
+return type). Two fitting paths exist: statsmodels ``GLM`` when both asymptotes are fixed at
+exactly ``1.0``/``0.0``, and ``statsmodels.base.model.GenericLikelihoodModel`` -- given a
+likelihood function, never a hand-rolled optimizer or IRLS loop -- otherwise. A fit with no
+interior maximum (wrong-sign slope, or an estimated asymptote pinned to a parameter-space
+boundary) is reported as ``Status.NOT_CONVERGED`` with the reason in ``Fit.warnings``, never as
+a number that happens to be where the optimizer stopped.
+
+**Known limitation.** A near-step curve (``s -> 0``) with an estimated asymptote, or a fixed
+one other than ``1``/``0``, is not detected: it can return ``Status.OK`` with Wald standard
+errors that carry little information. With such asymptotes the pre-fit overlap check is
+necessary but not sufficient for an interior maximum; it is exact only for ``u = 1, l = 0``.
 
 **v1 is binomial-only.** ``model`` accepts only ``"binomial"``; a new model family (``"ll4"``,
 ``"isotonic"``) is a v0.2 addition that requires bumping ``schema_version`` again, not a silent
 extension of the current one. ``schema_version`` is ``"4"``: the only version
 :func:`robustmargin.report.from_dict` reads, with ``"1"``, ``"2"`` and ``"3"`` (the card format of
 this package's former name, ``marginkit``) rejected. The v0.2 model-family addition anticipated
-here needs the bump *after* the current one. The number is deliberately not named:
-:data:`robustmargin.report.SCHEMA_VERSION` is the single source, and every document that copied a
-predicted number went stale together when the numbers ahead of it were spent elsewhere.
+here needs the bump *after* the current one. That number is deliberately not named:
+:data:`robustmargin.report.SCHEMA_VERSION` is the single source, and a predicted number copied
+elsewhere goes stale when the numbers ahead of it are spent on other changes.
 
-As of `decisions/0023` (Phase 7), :class:`Fit` also carries :attr:`~Fit.diagnostics` (model-only
-goodness of fit, dispersion and link comparison, filled only when ``status`` is ``OK`` -- see
-:func:`robustmargin.diagnose`) and :attr:`~Fit.monotonicity` (a data-only adjacent-level check,
-filled on *every* return path regardless of ``status`` -- see
-:func:`robustmargin.check_monotonicity` in :mod:`robustmargin.validation`). Both are reported and
-never acted on: neither changes ``link``, ``params``, or any other field of the ``Fit`` they are
-attached to.
+:class:`Fit` also carries :attr:`~Fit.diagnostics` (model-only goodness of fit, dispersion and
+link comparison, filled only when ``status`` is ``OK`` -- see :func:`robustmargin.diagnose`) and
+:attr:`~Fit.monotonicity` (a data-only adjacent-level check, filled on *every* return path
+regardless of ``status`` -- see :func:`robustmargin.check_monotonicity` in
+:mod:`robustmargin.validation`). Both are reported and never acted on: neither changes ``link``,
+``params``, or any other field of the ``Fit`` they are attached to.
 """
 
 from __future__ import annotations
@@ -71,13 +74,13 @@ _INVALID_FIT_STATUSES = frozenset({Status.UNREACHABLE, Status.FAILS_AT_BASELINE}
 
 # Tolerance for Covariance's positive-definiteness check: the minimum eigenvalue must exceed
 # this, scaled by the matrix's largest magnitude entry so the tolerance is not swamped by the
-# matrix's own scale. Strictly positive (not the semi-definite ``>= -tolerance`` this used to
-# be): a singular matrix, such as ``((0.0, 0.0), (0.0, 1.0))``, is rejected, because a singular
+# matrix's own scale. Strictly positive (not merely semi-definite, ``>= -tolerance``): a singular
+# matrix, such as ``((0.0, 0.0), (0.0, 1.0))``, is rejected, because a singular
 # covariance means at least one estimated parameter carries no information at all.
 _POSITIVE_DEFINITE_RELATIVE_TOLERANCE = 1e-12
 
 # ------------------------------------------------------------------------------------------
-# fit_dose_response: module constants (decisions/0005's numeric boundary test; plan section 5.1)
+# fit_dose_response: module constants (the numeric boundary test for an estimated asymptote)
 # ------------------------------------------------------------------------------------------
 
 _VALID_UPPER_LOWER = "estimate"
@@ -86,34 +89,33 @@ _STATSMODELS_LINKS = {
     "logit": families.links.Logit(),
     "cloglog": families.links.CLogLog(),
 }
-# decisions/0005: an estimated asymptote's logit-scale parameter (a for lower, b for upper)
-# beyond this magnitude, or the asymptote itself within this distance of a probability
-# boundary (0 or 1), means the likelihood has no interior maximum -- reported as
-# Status.NOT_CONVERGED with a boundary warning, never as a number. Changing either cut-off is a
-# statistical-method change and needs its own decisions/ record (decisions/0005's own
-# "Consequences" section).
+# An estimated asymptote's logit-scale parameter (a for lower, b for upper) beyond this
+# magnitude, or the asymptote itself within this distance of a probability boundary (0 or 1),
+# means the likelihood has no interior maximum -- reported as Status.NOT_CONVERGED with a
+# boundary warning, never as a number. Changing either cut-off is a statistical-method change.
 _ASYMPTOTE_LOGIT_BOUND = 15.0
 _ASYMPTOTE_PROBABILITY_EPS = 1e-6
 # Separation is decided by the exact pre-fit overlap check (`_check_separation`), never by
-# statsmodels' PerfectSeparationWarning (decisions/0006). That warning tests
-# `allclose(fitted, observed)`, which on grouped binomial data also fires on an exact fit --
-# every two-level design with overlap -- so it is filtered to "ignore" around both GLM calls
-# below. Every fit reaching those calls has already passed the exact check.
+# statsmodels' PerfectSeparationWarning. That warning tests `allclose(fitted, observed)`, which on
+# grouped binomial data also fires on an exact fit -- every two-level design with overlap -- so it
+# is filtered to "ignore" around both GLM calls below. Every fit reaching those calls has already
+# passed the exact check. The check is exact for fixed u = 1, l = 0 (Albert & Anderson, 1984); with
+# estimated or other fixed asymptotes it is necessary but not sufficient, and a near-step curve
+# there is not yet detected (see the module docstring).
 
-# decisions/0005 amendment: a fitted `s` greater than this factor times the span of the
-# likelihood-contributing transformed levels (the tested range on `log x` or `x`, excluding a
-# log-axis zero-severity control, which carries no covariate value) is flat up to rounding --
-# the wrong-sign case's degenerate limit, `s -> infinity` -- and gives Status.NOT_CONVERGED
-# rather than a covariance built from a near-zero slope (which would otherwise pass Covariance's
-# own positive-definiteness check while being numerically meaningless, for example ~1e61).
-# Changing this cut-off is a statistical-method change and needs its own decisions/ record.
+# A fitted `s` greater than this factor times the span of the likelihood-contributing transformed
+# levels (the tested range on `log x` or `x`, excluding a log-axis zero-severity control, which
+# carries no covariate value) is flat up to rounding -- the wrong-sign case's degenerate limit,
+# `s -> infinity` -- and gives Status.NOT_CONVERGED rather than a covariance built from a near-zero
+# slope (which would otherwise pass Covariance's own positive-definiteness check while being
+# numerically meaningless, for example ~1e61). Changing this cut-off is a statistical-method change.
 _FLAT_SLOPE_SPAN_FACTOR = 1e8
 
-# decisions/0005 amendment, likelihood-path convergence (W3): Newton's own `converged` flag only
-# bounds the last step taken, so two more checks apply at the final parameters. The Newton
-# polish's log-likelihood must not have regressed below the BFGS stage's, within this *relative*
-# tolerance (stats-review fix: an absolute tolerance does not scale with the log-likelihood's own
-# magnitude, which grows with sample size and is not something a caller controls), applied as
+# Likelihood-path convergence: Newton's own `converged` flag only bounds the last step taken, so
+# two more checks apply at the final parameters. The Newton polish's log-likelihood must not
+# have regressed below the BFGS stage's, within this *relative* tolerance (an absolute tolerance
+# does not scale with the log-likelihood's own magnitude, which grows with sample size and is
+# not something a caller controls), applied as
 # `bfgs_llf - _LLF_REGRESSION_TOLERANCE * (1 + |bfgs_llf|)` -- floating-point noise between two
 # different optimizers evaluating the same likelihood at very close points, scaled the same way
 # `_SCORE_TOLERANCE_FACTOR` below is.
@@ -125,11 +127,10 @@ _LLF_REGRESSION_TOLERANCE = 1e-8
 # that scale that never reaches zero, so the tolerance below is always well-defined.
 _SCORE_TOLERANCE_FACTOR = 1e-4
 
-# decisions/0005 case 1 and its amendment: shared wording for a wrong-sign slope (the GLM path's
-# own beta1 <= 0 check) and for the flat curve it degenerates into (`_FLAT_SLOPE_SPAN_FACTOR`
-# above) -- the same underlying phenomenon (no finite (mu, s) exists once the constrained
-# maximum is pushed to the s -> infinity boundary), so one reason is used for both, on both
-# fitting paths (W5).
+# Shared wording for a wrong-sign slope (the GLM path's own beta1 <= 0 check) and for the flat
+# curve it degenerates into (`_FLAT_SLOPE_SPAN_FACTOR` above) -- the same underlying phenomenon
+# (no finite (mu, s) exists once the constrained maximum is pushed to the s -> infinity
+# boundary), so one reason is used for both, on both fitting paths.
 _WRONG_SIGN_OR_FLAT_WARNING = (
     "fit_dose_response: the fitted curve has no interior maximum for direction='decreasing' "
     "(a wrong-sign slope, or a curve that is flat up to rounding) -- no finite (mu, s) exists"
@@ -182,9 +183,9 @@ class Covariance:
         :func:`numpy.linalg.eigvalsh`) must exceed ``1e-12``. The rule is therefore invariant to
         rescaling any single parameter, which matters because the natural scale mixes severity
         units (``mu``, ``s``) with probabilities (``upper``, ``lower``). It accepts every matrix
-        the ``0.1.0a2`` rule (minimum eigenvalue ``> 1e-12 * max(1, max|entry|)``) accepted. A
-        singular matrix -- for example ``((0.0, 0.0), (0.0, 1.0))``, or any matrix with a zero
-        eigenvalue -- is rejected, not merely a matrix with a negative one.
+        that a raw-eigenvalue rule (minimum eigenvalue ``> 1e-12 * max(1, max|entry|)``) would
+        accept. A singular matrix -- for example ``((0.0, 0.0), (0.0, 1.0))``, or any matrix with a
+        zero eigenvalue -- is rejected, not merely a matrix with a negative one.
     """
 
     names: tuple[str, ...]
@@ -248,9 +249,9 @@ def _check_cluster_ids(cluster_ids: tuple[str | int, ...] | None, *, label: str)
 
 @dataclass(frozen=True, kw_only=True, eq=False)
 class Prediction:
-    """The curve and a confidence band evaluated at a set of severities (:meth:`Fit.predict`,
-    plan section 5.1 item 6, R8). Never serialised (``report.py`` does not know this type): it
-    is a throwaway array bundle, not a stored result, per the Phase 4 plan's owner answer.
+    """The curve and a confidence band evaluated at a set of severities (:meth:`Fit.predict`).
+    Never serialised (``report.py`` does not know this type): it is a throwaway array bundle,
+    not a stored result.
 
     Two band scales are used, chosen by :meth:`Fit.predict` from which asymptotes were
     estimated -- documented in full on :meth:`Fit.predict` itself, since the choice depends on
@@ -302,7 +303,7 @@ class Prediction:
 class Fit:
     """A dose-response fit, or an explicit record of why one was not obtained.
 
-    The fitted curve (§5.1) is ``P(x) = u - (u - l) * F(z)``, where ``z = (log(x) - mu) / s`` on
+    The fitted curve is ``P(x) = u - (u - l) * F(z)``, where ``z = (log(x) - mu) / s`` on
     a log axis or ``z = (x - mu) / s`` on a linear axis, ``s > 0``, and ``F`` is the link's CDF
     (the standard normal CDF for ``probit``, the logistic CDF for ``logit``, or
     ``1 - exp(-exp(z))`` for ``cloglog``, which models the probability of *failure* rising with
@@ -325,23 +326,22 @@ class Fit:
 
     ``status == Status.OK`` if and only if both ``params`` and ``log_likelihood`` are present;
     when ``status`` is anything else, ``params``, ``covariance`` and ``log_likelihood`` are all
-    ``None`` -- no number is ever produced for a failed fit (hard constraint 3).
-    ``Status.UNREACHABLE`` and ``Status.FAILS_AT_BASELINE`` describe a *threshold*, not a fit
-    (they depend on a ``Definition`` a ``Fit`` does not have), and are never a ``Fit.status``.
+    ``None`` -- no number is ever produced for a failed fit. ``Status.UNREACHABLE`` and
+    ``Status.FAILS_AT_BASELINE`` describe a *threshold*, not a fit (they depend on a ``Definition``
+    a ``Fit`` does not have), and are never a ``Fit.status``.
 
-    Binomial curves are decreasing-only in this release: ``direction="increasing"`` raises,
-    pending owner decision D5's restatement of the definitions for an increasing-is-worse
-    outcome (§5.3). ``Observations`` itself still accepts both directions.
+    Binomial curves are decreasing-only in this release: ``direction="increasing"`` raises.
+    The curve ``P = u - (u - l) * F(z)`` with ``s > 0`` is decreasing by construction, and
+    increasing-is-worse outcomes are not yet supported. ``Observations`` itself still accepts
+    both directions.
 
-    ``predict()`` (curve and band evaluation, R8) arrives in Phase 4. ``diagnostics`` (§5.7:
-    goodness of fit, dispersion, link comparison) and ``monotonicity`` (§5.7's monotonicity
-    check, moved onto its own field by `decisions/0023`'s "Amendment 1") arrive in Phase 7 as two
-    appended fields, both defaulting to ``None`` -- but appending them is *not* the "safe
-    addition under Appendix B" an earlier version of this docstring claimed (`decisions/0023`'s
-    own "Corrects" note): every object in the packaged schema has ``additionalProperties: false``,
-    so a `0.1.0a4` reader would reject a card whose ``Fit`` carries either key at all, including a
-    ``null`` value. That is exactly the incompatibility ``schema_version`` exists to announce, so
-    `decisions/0023` introduced the fields with a ``schema_version`` bump rather than silently.
+    ``diagnostics`` (goodness of fit, dispersion, link comparison) and ``monotonicity`` (the
+    adjacent-level monotonicity check) are two fields that both default to ``None``. Carrying
+    them is *not* backwards-compatible with an older schema version: every object in the packaged
+    schema has ``additionalProperties: false``, so a reader of an older schema version rejects a
+    card whose ``Fit`` carries either key at all, including a ``null`` value. That is exactly the
+    incompatibility ``schema_version`` exists to announce, so the fields came with a
+    ``schema_version`` bump.
 
     Attributes
     ----------
@@ -387,7 +387,7 @@ class Fit:
         dependence was assumed when this fit was produced -- this field reflects the data's
         structure, not a modelling choice. ``None`` means only that the data had no clusters,
         not that independence was assumed. Used by :class:`~robustmargin.Ratio`'s dependence
-        guard (§5.6).
+        guard.
     warnings
         Free-text notes surfaced alongside the fit (for example, ``CONTROL_INCOMPATIBLE``
         carries a message suggesting ``upper="estimate"``). Empty by default.
@@ -400,16 +400,16 @@ class Fit:
         robustmargin stores it and never interprets it. Empty by default.
     diagnostics
         Model-only goodness-of-fit, dispersion and link-comparison diagnostics
-        (:func:`robustmargin.diagnose`, §5.7). Set exactly when ``status`` is
-        :data:`~robustmargin.Status.OK` (hard constraint 3: no model-derived numbers on a failed
-        fit); ``None`` otherwise. Appended field (`decisions/0023`).
+        (:func:`robustmargin.diagnose`). Set exactly when ``status`` is
+        :data:`~robustmargin.Status.OK` (no model-derived numbers on a failed fit); ``None``
+        otherwise.
     monotonicity
         A data-only adjacent-severity-level monotonicity check
-        (:func:`robustmargin.check_monotonicity`, `decisions/0023`'s "Amendment 1"), computed from
-        the raw :class:`~robustmargin.Observations` before a fitting path was even chosen. Unlike
+        (:func:`robustmargin.check_monotonicity`), computed from the raw
+        :class:`~robustmargin.Observations` before a fitting path was even chosen. Unlike
         ``diagnostics``, this is set on *every* fresh result regardless of ``status`` -- it needs
         only counts, never a converged fit. A serialised card may omit it (the schema does not
-        require it), in which case it reads back as ``None``. The last field, appended after
+        require it), in which case it reads back as ``None``. The last field, after
         ``diagnostics``.
     """
 
@@ -472,9 +472,8 @@ class Fit:
 
         if self.status is not Status.OK and self.diagnostics is not None:
             raise ValueError(
-                "Fit.diagnostics must be None when status is not OK (hard constraint 3: no "
-                f"model-derived numbers on a failed fit), got status={self.status!r} with "
-                "diagnostics set"
+                "Fit.diagnostics must be None when status is not OK (no model-derived "
+                f"numbers on a failed fit), got status={self.status!r} with diagnostics set"
             )
 
         is_ok = self.status is Status.OK
@@ -511,7 +510,7 @@ class Fit:
                 raise ValueError(
                     "Fit.params['mu'].fixed and Fit.params['s'].fixed must both be False when "
                     "status is OK: this package never produces a fit with a fixed location or "
-                    "scale (section 7)"
+                    "scale"
                 )
             s = params["s"].value
             lower = params["lower"].value
@@ -530,7 +529,7 @@ class Fit:
                         raise ValueError(
                             "Fit: the zero-severity control has failures but 'upper' is fixed "
                             "at exactly 1.0, so the likelihood is zero for this fit on a log "
-                            'axis; refit with upper="estimate" (section 5.1)'
+                            'axis; refit with upper="estimate"'
                         )
 
         non_fixed = {name for name, param in params.items() if not param.fixed}
@@ -542,7 +541,7 @@ class Fit:
 
     def predict(self, severity: ArrayLike, *, level: float = 0.95) -> Prediction:
         """Evaluate the fitted curve and a delta-method confidence band at each of
-        ``severity`` (plan section 5.1 item 6).
+        ``severity``.
 
         Two band scales are used, depending on which asymptotes this fit estimated:
 
@@ -557,7 +556,7 @@ class Fit:
           ``(0, 1)``, but not inside ``(l, u)`` specifically, since ``l``/``u`` themselves now
           carry uncertainty.
 
-        On a log axis, severity ``0.0`` is always the zero-severity control (R3): its estimate
+        On a log axis, severity ``0.0`` is always the zero-severity control: its estimate
         is ``upper`` exactly, never computed through ``log(0)``. It is not a special case for
         the band, either: it goes through the same computation as every other severity (so
         ``predict(0)`` and ``predict(1e-12)`` agree), which happens to give a zero-width band
@@ -584,7 +583,7 @@ class Fit:
         ------
         ValueError
             If ``self.status`` is not :data:`~robustmargin.Status.OK` (a failed fit has no curve
-            to evaluate -- hard constraint 3), if ``level`` is not finite, is a ``bool``, or
+            to evaluate), if ``level`` is not finite, is a ``bool``, or
             does not satisfy ``0 < level < 1``, or if ``severity`` is empty or contains a
             negative or non-finite entry.
         """
@@ -621,7 +620,7 @@ class Fit:
 
         # x = 0 on a log axis is not special-cased here: both band functions below route it
         # through the exact same logit-P gradient/delta computation as every other severity
-        # (C1), so `predict(0)` and `predict(1e-12)` agree, and a *fixed* `upper` still gets a
+        # so `predict(0)` and `predict(1e-12)` agree, and a *fixed* `upper` still gets a
         # zero-width band there for free (perturbing any other estimated parameter cannot move
         # a constant), with no separate formula to keep in sync.
         if upper_param.fixed and lower_param.fixed:
@@ -656,9 +655,9 @@ class Fit:
 
 
 def _transform(x: NDArray[np.float64], *, scale: str) -> NDArray[np.float64]:
-    """``log x`` on a log axis, ``x`` unchanged on a linear axis (plan section 5.1). Never
+    """``log x`` on a log axis, ``x`` unchanged on a linear axis. Never
     called on an exact-zero severity on a log axis -- callers route that case around this
-    function entirely (R3), so this never evaluates ``log(0)``.
+    function entirely, so this never evaluates ``log(0)``.
     """
     if scale == "log":
         return np.asarray(np.log(x), dtype=np.float64)
@@ -666,9 +665,9 @@ def _transform(x: NDArray[np.float64], *, scale: str) -> NDArray[np.float64]:
 
 
 def _f_cdf(z: NDArray[np.float64], link: str) -> NDArray[np.float64]:
-    """The link's CDF, modelling the probability of *failure* rising with ``z`` (plan section
-    5.1's orientation note). ``cloglog``'s ``1 - exp(-exp(z))`` is written as ``-expm1(-exp(z))``
-    for numerical stability, not for a different value.
+    """The link's CDF, modelling the probability of *failure* rising with ``z``. ``cloglog``'s
+    ``1 - exp(-exp(z))`` is written as ``-expm1(-exp(z))`` for numerical stability, not for a
+    different value.
     """
     if link == "probit":
         return np.asarray(norm.cdf(z), dtype=np.float64)
@@ -680,12 +679,12 @@ def _f_cdf(z: NDArray[np.float64], link: str) -> NDArray[np.float64]:
 def _f_survival(z: NDArray[np.float64], link: str) -> NDArray[np.float64]:
     """``1 - _f_cdf(z, link)``, computed directly from each link's own survival identity --
     never as ``1 - _f_cdf(z, link)`` -- so it stays numerically accurate at the tail where that
-    subtraction would round to exactly ``0.0`` (`decisions/0023` Amendment 2, item 2):
-    ``scipy.stats.norm.sf`` for probit; ``expit(-z) == 1 - expit(z)`` exactly for logit (the
-    logistic CDF's own reflection identity); ``exp(-exp(z)) == 1 - (-expm1(-exp(z)))`` exactly
-    for cloglog (``_f_cdf``'s own algebraic identity, read the other way). ``_f_cdf`` itself is
-    already accurate where *it* is small (large negative ``z``); this is its mirror image, accurate
-    where *it* is close to ``1`` (large positive ``z``).
+    subtraction would round to exactly ``0.0``: ``scipy.stats.norm.sf`` for probit;
+    ``expit(-z) == 1 - expit(z)`` exactly for logit (the logistic CDF's own reflection identity);
+    ``exp(-exp(z)) == 1 - (-expm1(-exp(z)))`` exactly for cloglog (``_f_cdf``'s own algebraic
+    identity, read the other way). ``_f_cdf`` itself is already accurate where *it* is small (large
+    negative ``z``); this is its mirror image, accurate where *it* is close to ``1`` (large positive
+    ``z``).
     """
     if link == "probit":
         return np.asarray(norm.sf(z), dtype=np.float64)
@@ -706,8 +705,8 @@ def _curve_success_probability(
     center: float = 0.0,
     spread: float = 1.0,
 ) -> NDArray[np.float64]:
-    """``P(x) = u - (u - l) * F(z)`` (plan section 5.1), with the log-axis zero-severity
-    control handled directly: ``P(0) = u`` exactly, never through ``log(0)`` (R3).
+    """``P(x) = u - (u - l) * F(z)``, with the log-axis zero-severity
+    control handled directly: ``P(0) = u`` exactly, never through ``log(0)``.
 
     ``center``/``spread`` let a caller evaluate this on the *centred-and-scaled* transformed
     covariate ``t' = (t - center) / spread`` instead of ``t`` itself (:func:`_centering_and_scale`):
@@ -742,10 +741,9 @@ def _curve_success_and_failure_probability(
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """``(p, 1 - p)`` for the curve at ``severity``, each computed *directly* rather than one as
     the complement of the other, so both stay numerically accurate at their own informative tail
-    (`decisions/0023` Amendment 2, item 2) -- used by :func:`robustmargin.diagnose`'s
-    goodness-of-fit sums, which need both ``p`` and ``1 - p`` (and their product) without either
-    rounding to an exact ``0``/``1`` for a cell that is not :func:`robustmargin.diagnose`'s own
-    *structural* exclusion.
+    -- used by :func:`robustmargin.diagnose`'s goodness-of-fit sums, which need both ``p`` and
+    ``1 - p`` (and their product) without either rounding to an exact ``0``/``1`` for a cell that is
+    not :func:`robustmargin.diagnose`'s own *structural* exclusion.
 
     ``p = l + (u - l) * (1 - F(z))``, using :func:`_f_survival` -- accurate where ``p`` itself is
     small (high severity, under ``direction="decreasing"``), the tail where :func:`_f_cdf` alone
@@ -757,7 +755,7 @@ def _curve_success_and_failure_probability(
     exact cancellation this function exists to avoid.
 
     Shares :func:`_curve_success_probability`'s log-axis zero-severity-control handling (``p(0)
-    = u`` exactly, R3) and ``center``/``spread`` reparametrisation -- see that function's
+    = u`` exactly) and ``center``/``spread`` reparametrisation -- see that function's
     docstring for both.
     """
     x = np.asarray(severity, dtype=np.float64)
@@ -787,11 +785,11 @@ def _cells_to_arrays(
 
 def _transformed_span(severity: NDArray[np.float64], *, scale: str) -> float:
     """The span (max - min) of the *likelihood-contributing* transformed levels: a log-axis
-    zero-severity control is excluded, since it carries no covariate value at all (R3) and so
+    zero-severity control is excluded, since it carries no covariate value at all and so
     cannot be part of a "tested range" on the transformed axis. Used by
-    ``_FLAT_SLOPE_SPAN_FACTOR``'s flat-curve check (decisions/0005 amendment, W1). Guaranteed
-    non-zero whenever ``_check_separation`` has already passed, because that check requires at
-    least two distinct likelihood-contributing severities.
+    ``_FLAT_SLOPE_SPAN_FACTOR``'s flat-curve check. Guaranteed non-zero whenever
+    ``_check_separation`` has already passed, because that check requires at least two distinct
+    likelihood-contributing severities.
     """
     nonzero = severity > 0.0 if scale == "log" else np.ones_like(severity, dtype=bool)
     transformed = _transform(severity[nonzero], scale=scale)
@@ -802,11 +800,11 @@ def _transformed_span(severity: NDArray[np.float64], *, scale: str) -> float:
 
 def _is_positive_definite(matrix: NDArray[np.float64]) -> bool:
     """:class:`Covariance`'s positive-definiteness rule, shared so the fitters can check a
-    natural-scale covariance or information matrix *before* building one (decisions/0005
-    amendment, W4): a failure then gives ``Status.NOT_CONVERGED`` with a reason instead of an
-    uncaught ``ValueError``, or a ``LinAlgError`` from :func:`numpy.linalg.eigvalsh` on a
-    non-finite matrix. Symmetry is not checked here: :func:`numpy.linalg.eigvalsh` reads the
-    lower triangle only, and the fitters symmetrise their own matrices before calling this.
+    natural-scale covariance or information matrix *before* building one: a failure then gives
+    ``Status.NOT_CONVERGED`` with a reason instead of an uncaught ``ValueError``, or a
+    ``LinAlgError`` from :func:`numpy.linalg.eigvalsh` on a non-finite matrix. Symmetry is not
+    checked here: :func:`numpy.linalg.eigvalsh` reads the lower triangle only, and the fitters
+    symmetrise their own matrices before calling this.
 
     The test is on the correlation matrix ``D^-1/2 . matrix . D^-1/2``: finite, every diagonal
     entry positive, and minimum eigenvalue ``> 1e-12``. A natural-scale covariance mixes
@@ -823,8 +821,8 @@ def _is_positive_definite(matrix: NDArray[np.float64]) -> bool:
         return False
     scale = np.sqrt(diagonal)
     correlation = matrix / np.outer(scale, scale)
-    # No symmetrising here: eigvalsh reads the lower triangle only, exactly as the 0.1.0a2 rule
-    # did, so a matrix within Covariance's symmetry tolerance is judged on the same entries.
+    # No symmetrising here: eigvalsh reads the lower triangle only, so a matrix within
+    # Covariance's symmetry tolerance is judged on its lower-triangle entries.
     return float(np.min(np.linalg.eigvalsh(correlation))) > _POSITIVE_DEFINITE_RELATIVE_TOLERANCE
 
 
@@ -832,17 +830,17 @@ def _centering_and_scale(severity: NDArray[np.float64], *, scale: str) -> tuple[
     """The centring constant ``m`` and scale ``d`` used to condition the transformed covariate
     *before* either fitting path ever sees it: fitting ``t' = (t - m) / d`` instead of ``t``
     directly is an exact reparametrisation of the identical curve
-    (``mu = m + d * mu'``, ``s = d * s'``; the asymptotes are untouched by it), so it is allowed
-    under hard constraint 2 -- it changes the optimiser's working units, not the model. Without
-    it, severity units that are very large or very small on the transformed axis (for example a
-    linear axis measured in micro-units, or in millions of units) make the optimiser's own
-    internal scale blow up or collapse, even though the natural-scale fit itself is perfectly
-    well identified.
+    (``mu = m + d * mu'``, ``s = d * s'``; the asymptotes are untouched by it), so it is
+    consistent with never hand-rolling a fitter -- it changes the optimiser's working units, not
+    the model. Without it, severity units that are very large or very small on the transformed axis
+    (for example a linear axis measured in micro-units, or in millions of units) make the
+    optimiser's own internal scale blow up or collapse, even though the natural-scale fit itself is
+    perfectly well identified.
 
     ``m`` is the mean and ``d`` the standard deviation of the *likelihood-contributing*
     transformed levels -- the same subset :func:`_transformed_span` and
     :func:`_check_separation` use: a log-axis zero-severity control is excluded, since it
-    carries no covariate value at all (R3). Falls back to the span, then to ``1.0``, in the
+    carries no covariate value at all. Falls back to the span, then to ``1.0``, in the
     degenerate case of a zero standard deviation (should not arise once
     :func:`_check_separation` has passed, since that requires at least two distinct
     likelihood-contributing severities).
@@ -874,10 +872,10 @@ def _full_binomial_log_likelihood(
     spread: float = 1.0,
 ) -> float:
     """The full binomial log-likelihood, including the ``lchoose`` combinatorial term, so it
-    matches R ``drc``'s ``logLik()`` on both fitting paths (``tools/drc_reference/README.md``;
-    "facts already established"). :func:`scipy.special.xlogy` gives a 0-successes or
-    0-failures cell a term of exactly ``0.0`` without ever evaluating ``log(0)`` (R3; hard
-    constraint 3).
+    matches R ``drc``'s ``logLik()`` on both fitting paths (see
+    https://github.com/robustmargin/robustmargin/blob/main/tools/drc_reference/README.md).
+    :func:`scipy.special.xlogy` gives a 0-successes or 0-failures cell a term of exactly ``0.0``
+    without ever evaluating ``log(0)``.
 
     ``center``/``spread`` are forwarded to :func:`_curve_success_probability` -- see there.
     Defaulted to the identity, so this still computes the reported ``Fit.log_likelihood`` on
@@ -918,7 +916,7 @@ def _covariance_entry(covariance: Covariance, name_a: str, name_b: str) -> float
 
 
 # ================================================================================================
-# Fit.predict's two band scales (plan section 5.1 item 6; documented in full on Fit.predict).
+# Fit.predict's two band scales (documented in full on Fit.predict).
 # ================================================================================================
 
 
@@ -941,7 +939,7 @@ def _predict_band_fixed_asymptotes(
 
     A log-axis zero-severity control is handled directly (``estimate = lo = hi = upper``, a
     zero-width band, since ``u`` is a constant here): ``z`` is undefined at ``x = 0`` on a log
-    axis (R3), so those entries are routed around the ``z``-based computation entirely rather
+    axis, so those entries are routed around the ``z``-based computation entirely rather
     than computed through ``log(0)``.
     """
     estimate = np.empty_like(x)
@@ -1048,8 +1046,8 @@ def _central_difference_jacobian(
     """The Jacobian of ``func`` at ``x`` by central finite differences: the delta method's
     numerical-differentiation step (used both to transform a fit's optimizer-scale covariance
     onto the natural scale, and inside :func:`Fit.predict`'s estimated-asymptote band), not a
-    fitting procedure -- hard constraint 2 forbids a hand-rolled optimizer or IRLS loop, not a
-    numerical derivative of an already-fitted quantity.
+    fitting procedure. The package never hand-rolls an optimizer or IRLS loop; a numerical
+    derivative of an already-fitted quantity is not one.
     """
     x = np.asarray(x, dtype=np.float64)
     f0 = np.asarray(func(x), dtype=np.float64)
@@ -1067,7 +1065,7 @@ def _central_difference_jacobian(
 
 
 # ================================================================================================
-# fit_dose_response: the estimated-asymptote (GenericLikelihoodModel) path (D7 decisions/0004)
+# fit_dose_response: the estimated-asymptote (GenericLikelihoodModel) path
 # ================================================================================================
 
 
@@ -1079,14 +1077,14 @@ def _unpack_optimizer_params(
     lower_value: float,
     upper_value: float,
 ) -> tuple[float, float, float, float]:
-    """Map the optimizer's internal ``(mu, log_s, [a], [b])`` vector (plan section 5.1 point 5)
+    """Map the optimizer's internal ``(mu, log_s, [a], [b])`` vector
     to the natural scale ``(mu, s, lower, upper)``. Whichever of ``a``/``b`` corresponds to a
     *fixed* asymptote is simply absent from ``params`` ("fixed asymptotes are left out of the
     parameter vector"). ``l < u`` holds by construction in every combination:
 
     - Both estimated: ``l = expit(a)`` and ``u = l + (1 - l) * expit(b)``.
     - ``upper`` estimated, ``lower`` fixed: ``u = l + (1 - l) * expit(b)`` with the fixed ``l``.
-    - ``lower`` estimated, ``upper`` fixed (C2, decisions/0005 amendment): ``l = u * expit(a)``
+    - ``lower`` estimated, ``upper`` fixed: ``l = u * expit(a)``
       with the fixed ``u`` -- *not* the unconstrained ``l = expit(a)`` used when ``upper`` is
       also estimated, which can exceed a fixed ``u`` and converge onto an increasing curve
       (``Fit`` would then reject ``lower.value < upper.value`` at construction). Anchoring ``l``
@@ -1112,17 +1110,16 @@ def _unpack_optimizer_params(
 @dataclass(frozen=True)
 class _GenericLogLikelihood:
     """The estimated-asymptote likelihood, passed to
-    ``statsmodels.base.model.GenericLikelihoodModel`` as its ``loglike=`` callable (D7
-    ``decisions/0004``: specifying a likelihood for a statsmodels optimizer, never a
-    subclass that reimplements the optimizer itself). Held as a plain callable object, not a
-    ``GenericLikelihoodModel`` subclass, so nothing here subclasses a type statsmodels ships
-    with no ``py.typed`` marker.
+    ``statsmodels.base.model.GenericLikelihoodModel`` as its ``loglike=`` callable
+    (specifying a likelihood for a statsmodels optimizer, never a subclass that reimplements the
+    optimizer itself). Held as a plain callable object, not a ``GenericLikelihoodModel`` subclass,
+    so nothing here subclasses a type statsmodels ships with no ``py.typed`` marker.
 
     ``center``/``spread`` are the :func:`_centering_and_scale` constants: the optimizer's own
     ``mu``/``log_s`` therefore live on the *centred-and-scaled* transformed covariate, not on
     natural units, which is what keeps the optimizer's working scale independent of the caller's
-    severity units (the stats-review fix for a fit that depended on them). ``a``/``b``
-    (asymptote logits) are untouched by this -- only ``mu``/``s`` are rescaled.
+    severity units (a fit must not depend on them). ``a``/``b`` (asymptote logits) are untouched by
+    this -- only ``mu``/``s`` are rescaled.
     """
 
     severity: NDArray[np.float64]
@@ -1170,8 +1167,8 @@ def _pilot_start(
     center: float,
     spread: float,
 ) -> tuple[float, float, float, float, bool]:
-    """A starting point for the estimated-asymptote optimizer -- "only a starting point" (plan
-    section 5.1 point 5), never itself reported as a fit. ``upper``/``lower`` start at the
+    """A starting point for the estimated-asymptote optimizer -- "only a starting point",
+    never itself reported as a fit. ``upper``/``lower`` start at the
     control rate (or the maximum rate) and the minimum rate (probabilities, unaffected by
     ``center``/``spread``); ``mu``/``s`` start from a GLM pilot fit of the *rescaled* rates
     against the same link, on the same centred-and-scaled covariate
@@ -1181,7 +1178,7 @@ def _pilot_start(
     ``mu0``/``s0`` are therefore returned already on that same rescaled ("primed") scale, ready
     to seed the optimizer's own ``mu'``/``log_s'`` directly with no further conversion.
 
-    The pilot GLM itself is never skipped or wrapped in a try/except: decisions/0006 means a
+    The pilot GLM itself is never skipped or wrapped in a try/except: a
     `PerfectSeparationWarning` from it is filtered to "ignore", not treated as a failure, so the
     only two things that actually change what is returned are (a) fewer than two distinct
     nonzero severities, when there is nothing to regress against at all, and (b) a wrong-sign
@@ -1189,7 +1186,7 @@ def _pilot_start(
     both sensible defaults *because* the rescaled covariate is centred at 0 with spread 1):
     robustness matters more than precision for a value the real optimizer only starts from.
     Case (b) is also reported back via ``pilot_wrong_sign``, so a caller whose real fit later
-    fails can attach the wrong-sign reason too (W5, decisions/0005 amendment).
+    fails can attach the wrong-sign reason too.
 
     Returns
     -------
@@ -1248,7 +1245,7 @@ def _boundary_warning(
     lower: float,
     upper: float,
 ) -> str | None:
-    """decisions/0005 case 2: an estimated asymptote pinned to a parameter-space boundary,
+    """An estimated asymptote pinned to a parameter-space boundary,
     checked both on the optimizer's own logit-scale parameter (``a``/``b``, ``|.| > 15``) and
     on the natural-scale probability itself (within ``1e-6`` of 0 or 1). Either test alone can
     miss a boundary fit the other catches (a huge logit-scale value that still rounds to a
@@ -1280,15 +1277,15 @@ def _boundary_warning(
             "exists"
         )
     if estimate_lower and not estimate_upper and (upper - lower) < _ASYMPTOTE_PROBABILITY_EPS:
-        # C2 (decisions/0005 amendment): with a fixed upper, l = u * expit(a) ranges over
-        # (0, u). l -> 0 (a -> -inf) is *not* exempt from a boundary check here -- the |a| > 15
-        # test above already applies to it, the same as it would for any other estimated
-        # asymptote's logit parameter, so it is not "ordinary" merely because there is no
-        # separate probability-floor test for it. This eps-based test instead covers the
-        # *other* end, l -> u (a -> +inf, expit(a) -> 1): the degenerate property there is the
-        # gap (u - l) collapsing (the curve going flat, u == l, no dynamic range at all), which
-        # a fixed magnitude bound on `a` alone does not directly test, because how large `a`
-        # needs to be for u - l to fall below eps depends on the fixed u itself.
+        # With a fixed upper, l = u * expit(a) ranges over (0, u). l -> 0 (a -> -inf) is *not*
+        # exempt from a boundary check here -- the |a| > 15 test above already applies to it, the
+        # same as it would for any other estimated asymptote's logit parameter, so it is not
+        # "ordinary" merely because there is no separate probability-floor test for it. This
+        # eps-based test instead covers the *other* end, l -> u (a -> +inf, expit(a) -> 1): the
+        # degenerate property there is the gap (u - l) collapsing (the curve going flat, u == l, no
+        # dynamic range at all), which a fixed magnitude bound on `a` alone does not directly test,
+        # because how large `a` needs to be for u - l to fall below eps depends on the fixed u
+        # itself.
         return (
             "fit_dose_response: the estimated lower asymptote reached the probability "
             f"boundary near the fixed upper asymptote (upper - lower = {upper - lower!r} < "
@@ -1306,8 +1303,8 @@ def _boundary_warning(
 def _failure_warnings(reason: str, *, pilot_wrong_sign: bool) -> tuple[str, ...]:
     """The ``warnings`` tuple for a ``NOT_CONVERGED`` estimated-asymptote fit: ``reason`` alone,
     or ``reason`` plus the shared wrong-sign/flat reason when a pilot GLM slope on the (rescaled)
-    data had the wrong sign for ``direction='decreasing'`` (W5, decisions/0005 amendment) --
-    unless ``reason`` already *is* that shared reason, in which case it is not duplicated.
+    data had the wrong sign for ``direction='decreasing'`` -- unless ``reason`` already *is* that
+    shared reason, in which case it is not duplicated.
     """
     if pilot_wrong_sign and reason != _WRONG_SIGN_OR_FLAT_WARNING:
         return (reason, _WRONG_SIGN_OR_FLAT_WARNING)
@@ -1327,31 +1324,30 @@ def _fit_generic(
 ) -> Fit:
     """The estimated-or-non-trivial-fixed-asymptote path: ``statsmodels``
     ``GenericLikelihoodModel`` given :class:`_GenericLogLikelihood`, fit with ``method="bfgs"``
-    then a ``method="newton"`` polish (plan section 5.1 point 5) -- both statsmodels optimizers,
-    never a hand-rolled Newton or IRLS loop (hard constraint 2).
+    then a ``method="newton"`` polish -- both statsmodels optimizers,
+    never a hand-rolled Newton or IRLS loop.
     """
     axis = obs.axis
 
     # Drop a structurally zero-contribution zero-severity control row before building the
-    # optimizer's own data (R10 "Still open" item 1, predates Phase 7's stats review as W3):
-    # with `upper` fixed at exactly 1.0 on a log axis, `_curve_success_probability`'s own R3
-    # rule pins this cell's fitted probability to exactly `upper` for every possible mu/s/lower,
-    # so its log-likelihood contribution is an exact constant with respect to every parameter
-    # this path estimates -- by the time `_fit_generic` is reached with upper fixed at 1.0,
-    # `_check_control_incompatible` has already ruled out a control with any failures here, so
-    # that constant is exactly 0. Leaving that row in the data had two distinct effects on the
-    # fit, not one, and this exclusion removes both at once: (1) `_pilot_start`'s own
-    # `upper_start` reads the *control's* rate when one is present (here, exactly 1.0) rather
-    # than the maximum rate among the other levels (here, about 0.96), which moved the pilot
-    # `mu0`/`s0` the real optimizer started from; (2) `GenericLikelihoodModel.fit` (statsmodels'
-    # own optimizer, not one of ours) minimises `-loglike(params) / nobs`, where `nobs` is the
-    # row count it was built with, so a zero-contribution row changes `nobs` and, with it, the
-    # scale at which `gtol`/`tol` judge convergence, even though the likelihood function itself
-    # is unchanged at every parameter value. Excluding it here mirrors `_fit_glm`'s own
-    # `fit_cells` exclusion below, and keeps both the pilot start and `nobs` identical to a fit
-    # over the same data with no control row at all. An *estimated* upper is never exempt: the
-    # zero_control branch then reports `upper` itself, a free parameter, so the control
-    # genuinely identifies it and must stay in the optimizer's data.
+    # optimizer's own data: with `upper` fixed at exactly 1.0 on a log axis,
+    # `_curve_success_probability`'s own zero-severity-control rule pins this cell's fitted
+    # probability to exactly `upper` for every possible mu/s/lower, so its log-likelihood
+    # contribution is an exact constant with respect to every parameter this path estimates -- by
+    # the time `_fit_generic` is reached with upper fixed at 1.0, `_check_control_incompatible` has
+    # already ruled out a control with any failures here, so that constant is exactly 0. Leaving
+    # that row in the data had two distinct effects on the fit, not one, and this exclusion removes
+    # both at once: (1) `_pilot_start`'s own `upper_start` reads the *control's* rate when one is
+    # present (here, exactly 1.0) rather than the maximum rate among the other levels (here, about
+    # 0.96), which moved the pilot `mu0`/`s0` the real optimizer started from; (2)
+    # `GenericLikelihoodModel.fit` (statsmodels' own optimizer, not one of ours) minimises
+    # `-loglike(params) / nobs`, where `nobs` is the row count it was built with, so a
+    # zero-contribution row changes `nobs` and, with it, the scale at which `gtol`/`tol` judge
+    # convergence, even though the likelihood function itself is unchanged at every parameter value.
+    # Excluding it here mirrors `_fit_glm`'s own `fit_cells` exclusion below, and keeps both the
+    # pilot start and `nobs` identical to a fit over the same data with no control row at all. An
+    # *estimated* upper is never exempt: the zero_control branch then reports `upper` itself, a free
+    # parameter, so the control genuinely identifies it and must stay in the optimizer's data.
     fit_cells = (
         tuple(c for c in cells if c.severity != 0.0)
         if axis.scale == "log" and not upper_is_estimate and upper_value == 1.0
@@ -1360,7 +1356,7 @@ def _fit_generic(
     severity, successes, trials = _cells_to_arrays(fit_cells)
 
     # Centre and scale the transformed covariate before either the pilot or the real optimiser
-    # ever sees it (stats-review fix: a fit must not depend on the caller's choice of severity
+    # ever sees it (a fit must not depend on the caller's choice of severity
     # units). This is an exact reparametrisation, not a different model -- see
     # _centering_and_scale and _GenericLogLikelihood.
     center, spread = _centering_and_scale(severity, scale=axis.scale)
@@ -1377,8 +1373,8 @@ def _fit_generic(
         if upper_is_estimate:
             a0 = float(_logit(np.clip(lower_for_start, eps, 1.0 - eps)))
         else:
-            # C2 (decisions/0005 amendment): l = u * expit(a) when upper is fixed, so a's
-            # start value inverts *that* formula with the fixed u, not l = expit(a) directly.
+            # l = u * expit(a) when upper is fixed, so a's start value inverts *that* formula with
+            # the fixed u, not l = expit(a) directly.
             a0 = float(_logit(np.clip(lower_for_start / upper_for_start, eps, 1.0 - eps)))
         start.append(a0)
     if upper_is_estimate:
@@ -1403,11 +1399,11 @@ def _fit_generic(
     exog = np.ones((severity.size, start_params.size))
     model = GenericLikelihoodModel(successes, exog, loglike=loglike_fn)
 
-    # The BFGS stage is only ever a starting point for the Newton polish (plan section 5.1
-    # point 5): it routinely reports its own `converged=False` / ConvergenceWarning even when
-    # it has landed close enough for Newton to finish the job, so only the *final* (Newton)
-    # result's own convergence signal decides the status below -- checking a warning merged
-    # across both stages would treat that expected intermediate state as a failure.
+    # The BFGS stage is only ever a starting point for the Newton polish: it routinely reports its
+    # own `converged=False` / ConvergenceWarning even when it has landed close enough for Newton to
+    # finish the job, so only the *final* (Newton) result's own convergence signal decides the
+    # status below -- checking a warning merged across both stages would treat that expected
+    # intermediate state as a failure.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         bfgs_result = model.fit(
@@ -1425,7 +1421,7 @@ def _fit_generic(
                 )
         except np.linalg.LinAlgError:
             # A singular Hessian during the Newton polish is usually the symptom of an estimated
-            # asymptote drifting to its boundary (decisions/0005); name that cause when the BFGS
+            # asymptote drifting to its boundary; name that cause when the BFGS
             # stage already shows it, so the reason does not depend on which platform's linear
             # algebra happens to fail first.
             bfgs_params = np.asarray(bfgs_result.params, dtype=np.float64)
@@ -1471,8 +1467,8 @@ def _fit_generic(
     mu = center + spread * mu_scaled
     s = spread * s_scaled
 
-    # W1 (decisions/0005 amendment): a flat curve up to rounding, checked before anything that
-    # would build a covariance from a near-degenerate slope.
+    # A flat curve up to rounding, checked before anything that would build a covariance from a
+    # near-degenerate slope.
     span = _transformed_span(severity, scale=axis.scale)
     if s > _FLAT_SLOPE_SPAN_FACTOR * span:
         return _status_only_fit(
@@ -1503,11 +1499,11 @@ def _fit_generic(
             fit_warnings=_failure_warnings(boundary_message, pilot_wrong_sign=pilot_wrong_sign),
         )
 
-    # W3 (decisions/0005 amendment): Newton's own `converged` flag only bounds the last step,
-    # so the final log-likelihood must not have regressed below the BFGS stage's (relative
-    # tolerance -- stats-review fix: an absolute tolerance here does not scale with the
-    # log-likelihood's own magnitude, which depends on the sample size, not on anything a
-    # caller controls), and the score at the final parameters must be near zero.
+    # Newton's own `converged` flag only bounds the last step, so the final log-likelihood must
+    # not have regressed below the BFGS stage's (relative tolerance -- an absolute tolerance here
+    # does not scale with the log-likelihood's own magnitude, which depends on the sample size,
+    # not on anything a caller controls), and the score at the final parameters must be near
+    # zero.
     bfgs_llf = float(bfgs_result.llf)
     llf_regressed = float(result.llf) < bfgs_llf - _LLF_REGRESSION_TOLERANCE * (1.0 + abs(bfgs_llf))
     score = np.asarray(model.score(final_params), dtype=np.float64)
@@ -1537,8 +1533,8 @@ def _fit_generic(
             fit_warnings=_failure_warnings(not_converged_reason, pilot_wrong_sign=pilot_wrong_sign),
         )
 
-    # W4 (decisions/0005 amendment): a non-finite Hessian entry is checked before eigvalsh ever
-    # sees it (numpy.linalg.eigvalsh raises LinAlgError on a non-finite array), and the
+    # A non-finite Hessian entry is checked before eigvalsh ever sees it
+    # (numpy.linalg.eigvalsh raises LinAlgError on a non-finite array), and the
     # positive-definite check itself is the same one Covariance applies, done here first so a
     # broken Hessian never reaches that constructor.
     hessian = np.asarray(model.hessian(final_params), dtype=np.float64)
@@ -1586,7 +1582,7 @@ def _fit_generic(
     natural_cov = (natural_cov + natural_cov.T) / 2.0
 
     # Covariance's own positive-definiteness rule, on the correlation scale so the status does
-    # not depend on severity units (decisions/0005 amendment, W4).
+    # not depend on severity units.
     if not _is_positive_definite(natural_cov):
         return _status_only_fit(
             obs,
@@ -1645,7 +1641,7 @@ def _fit_generic(
 
 
 # ================================================================================================
-# fit_dose_response: the fixed u=1, l=0 path (statsmodels GLM; plan section 5.1)
+# fit_dose_response: the fixed u=1, l=0 path (statsmodels GLM)
 # ================================================================================================
 
 
@@ -1661,9 +1657,9 @@ def _fit_glm(
     severity, successes, trials = _cells_to_arrays(fit_cells)
     failures = trials - successes
 
-    # Centre and scale the transformed covariate before the GLM ever sees it (stats-review fix:
-    # a fit must not depend on the caller's choice of severity units). An exact
-    # reparametrisation of the identical model -- see _centering_and_scale.
+    # Centre and scale the transformed covariate before the GLM ever sees it (a fit must not
+    # depend on the caller's choice of severity units). An exact reparametrisation of the
+    # identical model -- see _centering_and_scale.
     center, spread = _centering_and_scale(severity, scale=axis.scale)
     exog = add_constant((_transform(severity, scale=axis.scale) - center) / spread)
     endog = failures / trials
@@ -1706,9 +1702,9 @@ def _fit_glm(
     mu = center + spread * mu_scaled
     s = spread * s_scaled
 
-    # W1 (decisions/0005 amendment): a slope that is technically positive but effectively flat
-    # (for example beta1 ~ 1e-15) makes s explode, which would otherwise pass Covariance's own
-    # positive-definite check while being numerically meaningless (s on the order of 1e61).
+    # A slope that is technically positive but effectively flat (for example beta1 ~ 1e-15) makes s
+    # explode, which would otherwise pass Covariance's own positive-definite check while being
+    # numerically meaningless (s on the order of 1e61).
     span = _transformed_span(severity, scale=axis.scale)
     if s > _FLAT_SLOPE_SPAN_FACTOR * span:
         return _status_only_fit(
@@ -1720,14 +1716,14 @@ def _fit_glm(
             fit_warnings=(_WRONG_SIGN_OR_FLAT_WARNING,),
         )
 
-    # W2 / decisions/0007: both fitting paths report covariance from the *observed* information
+    # Both fitting paths report covariance from the *observed* information
     # (the inverse of the negative Hessian of the log-likelihood at the MLE), not statsmodels'
     # own `cov_params()` (the *expected*/Fisher information), which for a non-canonical link
     # such as probit or cloglog differs from what drc and GenericLikelihoodModel report.
     #
-    # Stats-review fix (item 2): there is no positive-definiteness gate on this intermediate,
-    # centred-and-scaled-covariate-scale ("beta-scale") information matrix any more -- checking
-    # it was the bug: even a perfectly fine fit's beta-scale matrix can have a large or small
+    # There is no positive-definiteness gate on this intermediate,
+    # centred-and-scaled-covariate-scale ("beta-scale") information matrix -- checking it would
+    # be a bug: even a perfectly fine fit's beta-scale matrix can have a large or small
     # absolute magnitude for reasons that have nothing to do with whether the fit is degenerate
     # (for example a design with very few levels), and a positive-definiteness rule was never
     # meant to judge an intermediate quantity. Only a narrow inversion safety net remains here;
@@ -1771,7 +1767,7 @@ def _fit_glm(
     natural_cov = (natural_cov + natural_cov.T) / 2.0
 
     # Covariance's own positive-definiteness rule, on the correlation scale so the status does
-    # not depend on severity units (decisions/0005 amendment, W4).
+    # not depend on severity units.
     if not _is_positive_definite(natural_cov):
         return _status_only_fit(
             obs,
@@ -1868,7 +1864,7 @@ def _control_cell(cells: tuple[Cell, ...]) -> Cell | None:
 def _check_control_incompatible(
     cells: tuple[Cell, ...], *, axis: Axis, upper_is_estimate: bool, upper_value: float
 ) -> str | None:
-    """plan section 5.1: a fixed ``upper=1.0`` with any failure at the zero-severity control
+    """A fixed ``upper=1.0`` with any failure at the zero-severity control
     drives the likelihood to zero on a log axis. Only meaningful on a log axis (a linear axis
     has no zero-severity control concept) and only when ``upper`` is fixed at exactly ``1.0``
     (a fixed ``upper`` at any other value does not create a zero-likelihood problem).
@@ -1886,9 +1882,9 @@ def _check_control_incompatible(
 
 
 def _check_separation(cells: tuple[Cell, ...], *, axis: Axis) -> str | None:
-    """The pre-fit separation check (plan section 5.1's "Statistics" list, item 3): checked on
+    """The pre-fit separation check: checked on
     nonzero levels on a log axis (the zero-severity control is excluded, since it carries no
-    covariate information -- R3), or on every level on a linear axis (there is no special
+    covariate information), or on every level on a linear axis (there is no special
     zero-severity control there). Triggers when no failure exists, no success exists, or the
     highest severity with a success is at or below the lowest severity with a failure (complete
     or quasi-complete separation, the latter including an exact tie at one level).
@@ -1940,9 +1936,9 @@ def _status_only_fit(
 
 def _finalize(fit: Fit, *, monotonicity: MonotonicityCheck) -> Fit:
     """Attach ``monotonicity`` (every return path, whatever the status) and ``diagnostics``
-    (only when ``fit.status is Status.OK``) to a freshly built ``Fit``, per `decisions/0023`'s
-    "Amendment 1". The single place :func:`fit_dose_response` routes every one of its return
-    statements through, so the diagnostics/monotonicity rule is stated once.
+    (only when ``fit.status is Status.OK``) to a freshly built ``Fit``. The single place
+    :func:`fit_dose_response` routes every one of its return statements through, so the
+    diagnostics/monotonicity rule is stated once.
     """
     diagnostics = diagnose(fit) if fit.status is Status.OK else None
     return replace(fit, diagnostics=diagnostics, monotonicity=monotonicity)
@@ -1957,41 +1953,43 @@ def fit_dose_response(
     lower: float | Literal["estimate"],
     dependence: str | None = None,
 ) -> Fit:
-    """Fit a binomial dose-response curve to ``obs`` (plan section 4's Public API, section 5.1).
+    """Fit a binomial dose-response curve to ``obs``.
 
-    Two fitting paths (D7 ``decisions/0004``): statsmodels ``GLM`` when both ``upper`` and
-    ``lower`` are fixed at exactly ``1.0``/``0.0``; ``statsmodels``
-    ``GenericLikelihoodModel`` -- given a likelihood, never a hand-rolled optimizer or IRLS loop
-    -- for every other combination of fixed and estimated asymptotes. Both paths are checked for
-    separation before fitting (plan section 5.1 item 3) and for a non-interior maximum after
-    fitting (``decisions/0005``); either gives an explicit :class:`~robustmargin.Status` with no
-    numbers, never a value that merely happens to be where the optimizer stopped.
+    Two fitting paths: statsmodels ``GLM`` when both ``upper`` and ``lower`` are fixed at exactly
+    ``1.0``/``0.0``; ``statsmodels`` ``GenericLikelihoodModel`` -- given a likelihood, never a
+    hand-rolled optimizer or IRLS loop -- for every other combination of fixed and estimated
+    asymptotes. Both paths are checked for separation before fitting and for a non-interior maximum
+    after fitting; either gives an explicit :class:`~robustmargin.Status` with no numbers, never a
+    value that merely happens to be where the optimizer stopped. One case is not yet detected: a
+    near-step curve (``s -> 0``) with an estimated asymptote, or a fixed one other than
+    ``1``/``0``, can return ``Status.OK`` with Wald standard errors that carry little
+    information. With such asymptotes the overlap check is necessary but not sufficient.
 
-    Before any of that, :func:`robustmargin.check_monotonicity` is run on ``obs`` directly
-    (`decisions/0023`'s "Amendment 1"), and its result is attached to the returned ``Fit`` as
-    ``monotonicity`` on *every* return path below, whatever the resulting ``status`` -- the check
-    needs only raw counts, so it is not hidden behind a fit that failed. ``diagnostics`` is filled
-    (via :func:`robustmargin.diagnose`) only when the fit reaches :data:`~robustmargin.Status.OK`.
+    Before any of that, :func:`robustmargin.check_monotonicity` is run on ``obs`` directly, and
+    its result is attached to the returned ``Fit`` as ``monotonicity`` on *every* return path
+    below, whatever the resulting ``status`` -- the check needs only raw counts, so it is not
+    hidden behind a fit that failed. ``diagnostics`` is filled (via :func:`robustmargin.diagnose`)
+    only when the fit reaches :data:`~robustmargin.Status.OK`.
 
     Parameters
     ----------
     obs
         The severity/outcome data to fit. Aggregated and per-observation ``Observations`` that
-        pool to the same cells give numerically identical fits (R1): everything below is a
+        pool to the same cells give numerically identical fits: everything below is a
         deterministic function of ``obs.cells()``, not of row order or representation.
     model
         Only ``"binomial"`` exists in this release.
     link
         ``"probit"``, ``"logit"`` or ``"cloglog"``. Fixed by the caller before the data is
-        seen (plan section 5.7): this function never compares links and picks one for you.
+        seen: this function never compares links and picks one for you.
     upper, lower
         Each either a fixed probability in ``[0, 1]``, or the literal string ``"estimate"``.
         Required, with no default (a wrong default would silently change what curve is fit).
     dependence
         ``None`` (the default) resolves to ``"independent"`` unless ``obs.cluster`` is set, in
-        which case omitting it raises (R2) -- forwarded to :func:`robustmargin.check_monotonicity`
-        as-is, so there is only one implementation of this guard (`decisions/0023`'s
-        "Amendment 1", item 6). ``"independent"`` may always be passed explicitly.
+        which case omitting it raises -- forwarded to :func:`robustmargin.check_monotonicity`
+        as-is, so there is only one implementation of this guard. ``"independent"`` may always
+        be passed explicitly.
 
     Returns
     -------
@@ -2001,21 +1999,20 @@ def fit_dose_response(
         :data:`~robustmargin.Status.NOT_CONVERGED` or
         :data:`~robustmargin.Status.CONTROL_INCOMPATIBLE`
         with no numbers and a reason in ``warnings``. ``cluster_ids`` mirrors ``obs.cluster``
-        whatever the outcome. R2's dependence guard is now enforced here too, at fit time
-        (`decisions/0023` "Amendment 1", item 6, via the ``check_monotonicity`` call above) --
-        :class:`~robustmargin.Ratio` and :func:`robustmargin.threshold` each still enforce it again
-        for their own clustered-fit inputs. ``monotonicity`` is never ``None`` on a freshly
-        built ``Fit``; ``diagnostics`` is ``None`` unless ``status`` is ``OK``.
+        whatever the outcome. The dependence guard is enforced here too, at fit time (via the
+        ``check_monotonicity`` call above) -- :class:`~robustmargin.Ratio` and
+        :func:`robustmargin.threshold` each still enforce it again for their own clustered-fit
+        inputs. ``monotonicity`` is never ``None`` on a freshly built ``Fit``; ``diagnostics`` is
+        ``None`` unless ``status`` is ``OK``.
 
     Raises
     ------
     ValueError
         If ``model``/``link`` is not one of the values above, if ``obs.direction`` is not
-        ``"decreasing"`` (an increasing-is-worse curve is pending owner decision D5; ``Fit``
+        ``"decreasing"`` (an increasing-is-worse curve is not yet supported; ``Fit``
         itself rejects it), if ``upper``/``lower`` is not a valid probability or ``"estimate"``,
         if both are fixed with ``upper <= lower``, or if ``obs.cluster`` is set and
-        ``dependence`` is not ``"independent"`` (R2, raised by
-        :func:`robustmargin.check_monotonicity`).
+        ``dependence`` is not ``"independent"`` (raised by :func:`robustmargin.check_monotonicity`).
     """
     if model != "binomial":
         raise ValueError(f"fit_dose_response: model must be 'binomial', got {model!r}")
@@ -2030,10 +2027,9 @@ def fit_dose_response(
             "is planned for v0.2)"
         )
 
-    # decisions/0023 Amendment 1, item 1: computed from the raw Observations before a fitting
-    # path is even chosen, and attached to every return path below. Item 6: this call is the
-    # dependence guard (R2) too -- there is no separate check here, so there is only one
-    # implementation.
+    # Computed from the raw Observations before a fitting path is even chosen, and attached to
+    # every return path below. This call is the dependence guard too -- there is no separate
+    # check here, so there is only one implementation.
     monotonicity = check_monotonicity(obs, dependence=dependence)
 
     upper_is_estimate, upper_value = _resolve_asymptote(upper, label="upper")
@@ -2062,9 +2058,9 @@ def fit_dose_response(
             monotonicity=monotonicity,
         )
 
-    # Owner decision 2026-10-15: a log-axis observation whose only severity level is the
-    # zero-severity control (R3's own "no covariate value at all" case, now with nothing *else*
-    # in the data either) has no likelihood-contributing level at all. Left unchecked, this
+    # A log-axis observation whose only severity level is the zero-severity control (the "no
+    # covariate value at all" case, with nothing *else* in the data either) has no
+    # likelihood-contributing level at all. Left unchecked, this
     # reaches `_centering_and_scale`/`_transformed_span` (both fitting paths) with an empty
     # nonzero-severity array and fails with numpy's own unhelpful "zero-size array to reduction
     # operation maximum which has no identity" rather than a message this package wrote itself.

@@ -69,6 +69,21 @@ no reported number moved.
   Publishing: TestPyPI first, an install check, then PyPI after the owner's approval. A
   pre-release tag stops after the TestPyPI install check. `tools/check_dist.py` holds the artifact
   checks that CI and the release both run.
+- The text in the package is self-contained: docstrings, comments, the schema's descriptions and
+  `pyproject.toml` no longer cite design documents that are not published. Eight exception
+  messages lost such a trailing reference, for example `(section 5.6)`. One `ratio_interval`
+  warning, which cannot fire under `dependence="independent"`, had its wrong reason for the
+  Fieller discriminant being non-negative corrected. Only that prose changed; every exception
+  type, raise condition and warning token is unchanged, and no code changed.
+  `tests/unit/test_shipped_text_is_self_contained.py` keeps it that way.
+- Docstrings now state two known limitations directly:
+  - a near-step curve with an estimated asymptote, or a fixed one other than 1/0, is not
+    detected and can return `OK` with uninformative Wald standard errors;
+  - the `OVERDISPERSED: ` screen fires often on small `df` even under a correct model.
+- `tools/check_dist.py` checks both artifacts against an allowlist of what may ship: the package
+  modules, `py.typed`, the schema, `LICENSE`, `pyproject.toml`, the build metadata, and
+  `README.md`, the only document, which is the PyPI project page. Any other file fails the
+  build, in CI and in the release workflow.
 - Warning and exception messages no longer cite internal design documents (decision records,
   plan sections, decision labels). Only the prose changed: the leading tokens `NON_MONOTONE: `,
   `NON_MONOTONE_DATA: `, `OVERDISPERSED: ` and `SPARSE_CELLS: ` are byte-identical, and every
@@ -89,6 +104,29 @@ no reported number moved.
   `ValueError` saying a dose-response curve needs at least one severity level besides the control.
   It previously raised an unexplained numpy error, or, when an asymptote was estimated, returned
   `NOT_CONVERGED`.
+- **Behavioural change: the exact bounds `threshold()` reports for a failed fit
+  (`SEPARATION`/`NOT_CONVERGED`) now meet their stated confidence** (`decisions/0028`).
+  - Before, the lower bound was the highest tested severity anywhere that confidently passed, and
+    the upper bound the lowest that confidently failed. When several tested levels sat close to
+    the target, that undercovered: in simulation, up to 13.6% of two-sided brackets and 28% of
+    one-sided bounds excluded the true threshold, against a claimed 5% at `level=0.95`.
+  - Each side now comes from a fixed-sequence scan. The lower bound comes from the run of
+    confidently passing levels upward from the lowest nonzero severity, and the upper bound from
+    the run of confidently failing levels downward from the highest. Each run stops at the first
+    level that does not qualify.
+  - Results are identical when the passing and failing levels are each contiguous from their end.
+    Otherwise a bound can move outwards, a bracket can become one-sided, or no bounds are
+    reported.
+  - Converged fits, `RIGHT`, `LEFT`, `FAILS_AT_BASELINE`, the monotonicity-contradiction check and
+    the grid value are unchanged.
+  - Known limitation, now documented on `Threshold`. There are five kinds of exact result:
+    `RIGHT`, `LEFT`, a bracket, a one-sided lower bound and a one-sided upper bound. For each,
+    the chance that it is returned *and* excludes the true threshold is at most `1 - level`.
+    Which kind is returned depends on the data, so the combined rate is bounded only by
+    `4 * (1 - level)`. In simulation it reached about 8.4% at `level=0.95`.
+  - The one-sided fallback warning now names the confidence at which the other side was
+    missing, the bracket confidence `(1 + level) / 2`, and says the reported side was
+    rescanned at `level`. It previously named only `level`, where the missing side can exist.
 
 # Released as marginkit
 

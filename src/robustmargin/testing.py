@@ -36,9 +36,9 @@ __all__ = ["fake_fit", "fake_ratio", "fake_threshold"]
 
 class _Unset:
     """Sentinel distinguishing "argument not passed" from an explicit ``None`` override for
-    ``fake_fit``'s ``diagnostics``/``monotonicity`` parameters (`decisions/0023` Amendment 2,
-    item 4): an explicit argument -- ``None`` included -- always overrides; only *omitting* the
-    argument entirely means "compute the real one"."""
+    ``fake_fit``'s ``diagnostics``/``monotonicity`` parameters: an explicit argument --
+    ``None`` included -- always overrides; only *omitting* the argument entirely means "compute
+    the real one"."""
 
     def __repr__(self) -> str:
         return "<unset>"
@@ -49,8 +49,7 @@ _UNSET = _Unset()
 
 def _observations_from_cells(fit: Fit) -> Observations:
     """Rebuild the :class:`~robustmargin.Observations` a fake ``fit`` "came from", so
-    :func:`~robustmargin.check_monotonicity` can run on it the same way it would on real data
-    (`decisions/0023` Amendment 2, item 4)."""
+    :func:`~robustmargin.check_monotonicity` can run on it the same way it would on real data."""
     return Observations.from_counts(
         fit.axis,
         severity=[c.severity for c in fit.cells],
@@ -78,14 +77,14 @@ _CELLS_A: tuple[Cell, ...] = _CELLS
 _CELLS_B: tuple[Cell, ...] = (
     # severity=0.0 is an all-success control, like _CELLS_A's: 'upper' is fixed at exactly 1.0
     # in _fake_ok_params_and_covariance, and a failing control combined with a fixed upper=1.0
-    # makes the likelihood zero on a log axis (Fit's own check, section 5.1).
+    # makes the likelihood zero on a log axis (Fit's own check).
     Cell(severity=0.0, successes=100, trials=100),
     Cell(severity=1.5, successes=50, trials=100),
     Cell(severity=3.0, successes=10, trials=100),
 )
 
-# The 14 (status, censoring) combinations plan section 5.5 allows for a Threshold (the Phase 3
-# plan's worked breakdown), mirroring the invariants Threshold.__post_init__ enforces.
+# The 14 (status, censoring) combinations a Threshold allows, mirroring the invariants
+# Threshold.__post_init__ enforces.
 _ALLOWED_THRESHOLD_COMBINATIONS: frozenset[tuple[Status, Censoring]] = frozenset(
     {(Status.OK, censoring) for censoring in Censoring}
     | {
@@ -102,7 +101,7 @@ _ALLOWED_THRESHOLD_COMBINATIONS: frozenset[tuple[Status, Censoring]] = frozenset
 # UNREACHABLE and FAILS_AT_BASELINE are properties of a perfectly good fit (the target
 # performance is out of the fitted curve's range, or the control already fails); SEPARATION,
 # NOT_CONVERGED and CONTROL_INCOMPATIBLE are properties of the fit itself, so a threshold with
-# one of those statuses is built on a fit carrying the same status (section 5.5 stats review).
+# one of those statuses is built on a fit carrying the same status.
 _FIT_STATUS_FOR_THRESHOLD_STATUS: dict[Status, Status] = {
     Status.OK: Status.OK,
     Status.UNREACHABLE: Status.OK,
@@ -151,9 +150,9 @@ def _fake_ok_fit(
         warnings=(_FAKE_WARNING,),
         provenance=_fake_provenance(provenance),
     )
-    # decisions/0023 Amendment 2, item 4: mirrors a real fit_dose_response result -- diagnostics
-    # through diagnose() (status is OK here, so this never raises), monotonicity through
-    # check_monotonicity() on the same cells -- unless the caller explicitly overrode either.
+    # Mirrors a real fit_dose_response result -- diagnostics through diagnose() (status is OK
+    # here, so this never raises), monotonicity through check_monotonicity() on the same cells --
+    # unless the caller explicitly overrode either.
     resolved_diagnostics = diagnose(base) if isinstance(diagnostics, _Unset) else diagnostics
     resolved_monotonicity = (
         check_monotonicity(_observations_from_cells(base))
@@ -185,18 +184,16 @@ def fake_fit(
     provenance
         Stored on the result as given, or ``{}`` if not provided.
     diagnostics
-        Mirrors a real fit (`decisions/0023` Amendment 2, item 4): when omitted entirely, this is
-        :func:`~robustmargin.diagnose` on the built fit when ``status`` is ``OK``, or ``None``
-        otherwise (:func:`~robustmargin.diagnose` itself requires ``status is Status.OK``). Passing
-        an explicit value -- ``None`` included -- always overrides that and is stored as given;
-        ``Fit`` itself still rejects a non-``None`` value when ``status`` is not ``OK`` (hard
-        constraint 3).
+        Mirrors a real fit: when omitted entirely, this is :func:`~robustmargin.diagnose` on the
+        built fit when ``status`` is ``OK``, or ``None`` otherwise (:func:`~robustmargin.diagnose`
+        itself requires ``status is Status.OK``). Passing an explicit value -- ``None`` included --
+        always overrides that and is stored as given; ``Fit`` itself still rejects a non-``None``
+        value when ``status`` is not ``OK`` (a failed fit never carries a number).
     monotonicity
         Mirrors a real fit, the same way ``diagnostics`` does: when omitted entirely, this is
         :func:`~robustmargin.check_monotonicity` on the built fit's own cells, for *every*
         ``status`` (a real :func:`~robustmargin.fit_dose_response` result is never ``None`` here
-        regardless of status, `decisions/0023` "Amendment 1"). An explicit value -- ``None``
-        included -- always overrides.
+        regardless of status). An explicit value -- ``None`` included -- always overrides.
 
     Returns
     -------
@@ -261,8 +258,8 @@ def fake_threshold(
     Raises
     ------
     ValueError
-        If ``(status, censoring)`` is not one of the fourteen combinations plan section 5.5
-        allows for a ``Threshold``.
+        If ``(status, censoring)`` is not one of the fourteen combinations a ``Threshold``
+        allows.
     """
     if (status, censoring) not in _ALLOWED_THRESHOLD_COMBINATIONS:
         raise ValueError(
@@ -296,22 +293,21 @@ def fake_threshold(
         value, lo, hi = 0.05, 0.03, 0.08
         interval_method = "profile"
     else:
-        # SEPARATION / NOT_CONVERGED with censoring NONE (Sec. 5.2's exact-bound fallback,
-        # with both sides happening to be available here).
+        # SEPARATION / NOT_CONVERGED with censoring NONE (the exact-bound fallback, with both
+        # sides happening to be available here).
         value, lo, hi = None, 0.02, 0.09
         interval_method = "exact_bound"
 
-    # decisions/0010: the two appended fields are set exactly where the invariants allow them,
-    # so a consumer testing against a fake sees the same shape a real result has. A fake that
-    # left them None on FAILS_AT_BASELINE would quietly stop exercising the field that status
-    # exists to carry.
+    # The baseline and grid fields are set exactly where the invariants allow them, so a
+    # consumer testing against a fake sees the same shape a real result has. A fake that left
+    # them None on FAILS_AT_BASELINE would quietly stop exercising the field that status exists
+    # to carry.
     baseline: BaselineRate | None = None
     grid: GridBreakPoint | None = None
     if status is Status.FAILS_AT_BASELINE:
         # The two-sided exact interval for 98/200 at level=0.95, which is what
-        # `censoring._baseline_rate` produces for the same counts (plan section 5.4). Computed
-        # rather than transcribed, so the fake cannot drift from the real path -- an earlier
-        # version hardcoded a pair that differed from it, which `api-compat` caught.
+        # `censoring._baseline_rate` produces for the same counts. Computed rather than
+        # transcribed, so the fake cannot drift from the real path.
         _lo, _hi = binomtest(98, 200).proportion_ci(confidence_level=0.95, method="exact")
         baseline = BaselineRate(
             severity=0.0,
@@ -373,7 +369,7 @@ def fake_ratio(
 ) -> Ratio:
     """Build a deterministic, schema-valid :class:`~robustmargin.Ratio`.
 
-    A failed or censored ratio carries no numbers (owner decision): whenever ``status`` is not
+    A failed or censored ratio carries no numbers: whenever ``status`` is not
     ``OK`` or ``censoring`` is not ``NONE``, ``shape``, ``estimate``, ``lo`` and ``hi`` are all
     ``None``, matching :class:`~robustmargin.Ratio`'s own invariant.
 
@@ -386,8 +382,8 @@ def fake_ratio(
         ``status`` or a non-``NONE`` ``censoring`` raises ``ValueError``, since that combination
         can never be a valid ``Ratio``. Every member is buildable, including
         ``IntervalShape.EXCLUSIVE``, which a real :func:`~robustmargin.ratio_interval` call cannot
-        produce while ``dependence="independent"`` (`decisions/0022`) but whose
-        :class:`~robustmargin.Ratio` invariants still need a consumer-testable fixture.
+        produce while ``dependence="independent"`` but whose :class:`~robustmargin.Ratio` invariants
+        still need a consumer-testable fixture.
     status
         The :class:`~robustmargin.Status` to build.
     censoring
@@ -439,17 +435,17 @@ def fake_ratio(
         elif resolved_shape is IntervalShape.UNBOUNDED:
             lo, hi = None, None
         elif resolved_shape is IntervalShape.HALF_OPEN:
-            # [lo, inf): lo <= estimate is Ratio's own invariant (decisions/0022). This is a
-            # shape a real ratio_interval(method="fieller") call does produce -- it covers an
-            # open region of the parameter space (decisions/0022) -- unlike EXCLUSIVE below.
+            # [lo, inf): lo <= estimate is Ratio's own invariant. This is a shape a real
+            # ratio_interval(method="fieller") call does produce -- it covers an open region of
+            # the parameter space -- unlike EXCLUSIVE below.
             lo, hi = ratio_value * 0.5, None
         else:
             # EXCLUSIVE: unreachable through ratio_interval() itself while
-            # dependence="independent" fixes the covariance term at 0 (decisions/0022), but
-            # Ratio's own invariants for it stay enforced against v0.2's dependence="paired",
-            # and this fake builds one directly so a consumer can still test against it. The
-            # point estimate sits on the near edge of the excluded gap, inside the (-inf, lo]
-            # ray of the Fieller confidence set.
+            # dependence="independent" fixes the covariance term at 0, but Ratio's own
+            # invariants for it stay enforced against v0.2's dependence="paired", and this fake
+            # builds one directly so a consumer can still test against it. The point estimate
+            # sits on the near edge of the excluded gap, inside the (-inf, lo] ray of the
+            # Fieller confidence set.
             lo, hi = ratio_value, ratio_value + 1.0
 
     return Ratio(

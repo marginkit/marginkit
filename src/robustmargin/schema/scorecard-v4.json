@@ -85,7 +85,7 @@
     },
     "Fit": {
       "type": "object",
-      "description": "robustmargin.Fit: a dose-response fit, or an explicit record of why one was not obtained. This schema is binomial-only: model accepts only \"binomial\" and direction accepts only \"decreasing\" (an increasing-is-worse definition is pending owner decision D5). params are on the natural scale, never the optimiser's reparametrisation.",
+      "description": "robustmargin.Fit: a dose-response fit, or an explicit record of why one was not obtained. This schema is binomial-only: model accepts only \"binomial\" and direction accepts only \"decreasing\" (increasing-is-worse outcomes are not yet supported). params are on the natural scale, never the optimiser's reparametrisation.",
       "properties": {
         "type": {
           "const": "Fit"
@@ -196,7 +196,7 @@
           "type": "object"
         },
         "diagnostics": {
-          "description": "Model-only goodness of fit, dispersion and link comparison (decisions/0023, plan section 5.7). Set exactly when this Fit's own status is OK; null otherwise.",
+          "description": "Model-only goodness of fit, dispersion and link comparison. Set exactly when this Fit's own status is OK; null otherwise.",
           "anyOf": [
             {
               "type": "null"
@@ -207,7 +207,7 @@
           ]
         },
         "monotonicity": {
-          "description": "A data-only adjacent-severity-level monotonicity check (decisions/0023 \"Amendment 1\"), computed from the raw Observations before a fitting path was chosen. Set on every freshly-built Fit regardless of status; null only when a payload omits it.",
+          "description": "A data-only adjacent-severity-level monotonicity check, computed from the raw Observations before a fitting path was chosen. Set on every freshly-built Fit regardless of status; null only when a payload omits it.",
           "anyOf": [
             {
               "type": "null"
@@ -235,7 +235,7 @@
     },
     "Threshold": {
       "type": "object",
-      "description": "robustmargin.Threshold: where a fitted curve crosses a target performance, with a confidence interval, or an explicit record of why no value is reported. direction accepts only \"decreasing\" (owner decision D5 pending for increasing-is-worse outcomes). Per-level trial counts live on fit.cells, not on a separate field.",
+      "description": "robustmargin.Threshold: where a fitted curve crosses a target performance, with a confidence interval, or an explicit record of why no value is reported. direction accepts only \"decreasing\" (increasing-is-worse outcomes are not yet supported). Per-level trial counts live on fit.cells, not on a separate field.",
       "properties": {
         "type": {
           "const": "Threshold"
@@ -300,7 +300,7 @@
           }
         },
         "baseline": {
-          "description": "Set when status is FAILS_AT_BASELINE, null otherwise (decisions/0010). Appended in 0.1.0a3.",
+          "description": "Set when status is FAILS_AT_BASELINE, null otherwise.",
           "oneOf": [
             {
               "$ref": "#/$defs/BaselineRate"
@@ -311,7 +311,7 @@
           ]
         },
         "grid": {
-          "description": "The grid break-point accompanying a SEPARATION/NOT_CONVERGED exact-bound fallback, null otherwise (decisions/0010). It is a grid statistic at grid resolution and is never the threshold value. Appended in 0.1.0a3.",
+          "description": "The grid break-point accompanying a SEPARATION/NOT_CONVERGED exact-bound fallback, null otherwise. It is a grid statistic at grid resolution and is never the threshold value.",
           "oneOf": [
             {
               "$ref": "#/$defs/GridBreakPoint"
@@ -347,7 +347,7 @@
     },
     "Ratio": {
       "type": "object",
-      "description": "robustmargin.Ratio: the ratio of two thresholds' severities, on the same axis, with a confidence interval. A failed or censored ratio (status != OK or censoring != NONE) carries shape=null, estimate=null, lo=null, hi=null -- no numbers. dependence accepts only \"independent\" (a later release adds \"paired\"). IntervalShape.HALF_OPEN (decisions/0022) means lo set, hi null, i.e. [lo, inf); EXCLUSIVE stays a valid shape (its Ratio invariants are still enforced) but is unreachable from ratio_interval() while dependence=\"independent\".",
+      "description": "robustmargin.Ratio: the ratio of two thresholds' severities, on the same axis, with a confidence interval. A failed or censored ratio (status != OK or censoring != NONE) carries shape=null, estimate=null, lo=null, hi=null -- no numbers. dependence accepts only \"independent\" (a later release adds \"paired\"). IntervalShape.HALF_OPEN means lo set, hi null, i.e. [lo, inf); EXCLUSIVE stays a valid shape (its Ratio invariants are still enforced) but is unreachable from ratio_interval() while dependence=\"independent\".",
       "properties": {
         "type": {
           "const": "Ratio"
@@ -582,7 +582,7 @@
     },
     "BaselineRate": {
       "type": "object",
-      "description": "robustmargin.BaselineRate: the control cell's observed rate with its exact (Clopper-Pearson) interval, reported when a Threshold's status is FAILS_AT_BASELINE (plan section 5.5, decisions/0010). An untagged helper, like Cell: it appears only as Threshold.baseline. Its lo/hi are a per-cell exact interval and are deliberately NOT a threshold interval -- plan section 5.4 forbids attaching Clopper-Pearson to a threshold, which is why these live here and never in Threshold.lo/.hi.",
+      "description": "robustmargin.BaselineRate: the control cell's observed rate with its exact (Clopper-Pearson) interval, reported when a Threshold's status is FAILS_AT_BASELINE. An untagged helper, like Cell: it appears only as Threshold.baseline. Its lo/hi are a per-cell exact interval and are deliberately NOT a threshold interval -- a Clopper-Pearson interval is never attached to a threshold, which is why these live here and never in Threshold.lo/.hi.",
       "properties": {
         "severity": {
           "type": "number"
@@ -624,7 +624,7 @@
     },
     "Diagnostics": {
       "type": "object",
-      "description": "robustmargin.Diagnostics: model-only fit diagnostics -- goodness of fit, dispersion and link comparison, reported and never acted on automatically (plan section 5.7, decisions/0023 as amended by that decision's \"Amendment 1\", which moved the monotonicity check off this type entirely onto MonotonicityCheck). An untagged helper, like BaselineRate: it appears only as Fit.diagnostics, and only when that Fit's own status is OK.",
+      "description": "robustmargin.Diagnostics: model-only fit diagnostics -- goodness of fit, dispersion and link comparison, reported and never acted on automatically (the monotonicity check is not part of this type: it lives on MonotonicityCheck). An untagged helper, like BaselineRate: it appears only as Fit.diagnostics, and only when that Fit's own status is OK.",
       "properties": {
         "deviance": {
           "type": [
@@ -681,7 +681,7 @@
     },
     "AdjacentPair": {
       "type": "object",
-      "description": "robustmargin.AdjacentPair: one adjacent-severity-level pair from a MonotonicityCheck, with its raw counts, one-sided Fisher exact p-value and Holm-adjusted p-value (decisions/0023 \"Amendment 1\").",
+      "description": "robustmargin.AdjacentPair: one adjacent-severity-level pair from a MonotonicityCheck, with its raw counts, one-sided Fisher exact p-value and Holm-adjusted p-value.",
       "properties": {
         "severity_low": {
           "type": "number"
@@ -726,7 +726,7 @@
     },
     "MonotonicityCheck": {
       "type": "object",
-      "description": "robustmargin.MonotonicityCheck: a data-only adjacent-level monotonicity check on raw counts (decisions/0023 \"Amendment 1\") -- populated on every fit_dose_response return path, whatever the Status, since it needs only counts, never a fitted curve. An untagged helper, like BaselineRate: it appears only as Fit.monotonicity.",
+      "description": "robustmargin.MonotonicityCheck: a data-only adjacent-level monotonicity check on raw counts -- populated on every fit_dose_response return path, whatever the Status, since it needs only counts, never a fitted curve. An untagged helper, like BaselineRate: it appears only as Fit.monotonicity.",
       "properties": {
         "direction": {
           "enum": [
